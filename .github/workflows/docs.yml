@@ -81,7 +81,7 @@ jobs:
         run: ../script/generate-api-samples.rb --template
 
       - name: Cache HTML Proofer
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: tmp/.htmlproofer
           key: ${{ runner.os }}-htmlproofer
@@ -127,7 +127,7 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
   deploy-issue:
     name: Open/close deploy issue
