@@ -99,9 +99,11 @@ GEM
       lint_roller (~> 1.1)
       regexp_parser (>= 2.0)
       rubocop (~> 1.86, >= 1.86.2)
-    rubocop-sorbet (0.14.0)
+    rubocop-sorbet (0.15.0)
       lint_roller
+      rbi (~> 0.4)
       rubocop (>= 1.75.2)
+      spoom (~> 1.8)
     ruby-lsp (0.26.11)
       language_server-protocol (~> 3.17.0)
       prism (>= 1.2, < 2.0)
@@ -120,15 +122,15 @@ GEM
       rexml
       simplecov (~> 1.0)
     simpleidn (0.2.3)
-    sorbet (0.6.13433)
-      sorbet-static (= 0.6.13433)
-    sorbet-runtime (0.6.13433)
-    sorbet-static (0.6.13433-aarch64-linux)
-    sorbet-static (0.6.13433-universal-darwin)
-    sorbet-static (0.6.13433-x86_64-linux)
-    sorbet-static-and-runtime (0.6.13433)
-      sorbet (= 0.6.13433)
-      sorbet-runtime (= 0.6.13433)
+    sorbet (0.6.13437)
+      sorbet-static (= 0.6.13437)
+    sorbet-runtime (0.6.13437)
+    sorbet-static (0.6.13437-aarch64-linux)
+    sorbet-static (0.6.13437-universal-darwin)
+    sorbet-static (0.6.13437-x86_64-linux)
+    sorbet-static-and-runtime (0.6.13437)
+      sorbet (= 0.6.13437)
+      sorbet-runtime (= 0.6.13437)
     spoom (1.8.7)
       erubi (>= 1.10.0)
       prism (>= 0.28.0)
@@ -258,7 +260,7 @@ CHECKSUMS
   rubocop-md (2.0.4) sha256=0d076b6b5e99dea2ddc928c4bd702497decb9a8400da7808091e02ebcafcfb93
   rubocop-performance (1.27.0) sha256=eeeb1374d062a368ee1c787b70eb0b0cc4b184cb1f8565f424760946146d61ce
   rubocop-rspec (3.10.2) sha256=0b3e2ecc592cd10ecbf0095bb58d1e357905276e069643523cc19eb7495f65e2
-  rubocop-sorbet (0.14.0) sha256=30899556c9d02ab291d8bb761bae1cc025de56f72d909286b6960c1620d67bda
+  rubocop-sorbet (0.15.0) sha256=666abfb804feb4c5b298e5143ad6ee154ddc486fcd2d15648f8a6ca22b805c70
   ruby-lsp (0.26.11) sha256=4cc8f1587237ff8c9031680b5491df901a82559eeaa1ae96863ffe700b32583d
   ruby-macho (6.0.0) sha256=7bae15ff5564d06342a045523e47049cbf09f16e80b5ceb5bbc5fd8d8ec00c8e
   ruby-prof (2.0.5) sha256=dbc3b5112089538ac33303145db0cbd77cbdcdbc05b09e44a967ff72a36d6c0e
@@ -270,12 +272,12 @@ CHECKSUMS
   simplecov (1.1.1) sha256=25825ef13f0b2e74694d769817dad6ab8e90131dabdaa666e522fea105521e78
   simplecov-cobertura (4.0.0) sha256=e4fb3159b1ecea545b44f5452a8611305323e78ad23eae8aed35924d072e01ea
   simpleidn (0.2.3) sha256=08ce96f03fa1605286be22651ba0fc9c0b2d6272c9b27a260bc88be05b0d2c29
-  sorbet (0.6.13433) sha256=07d3bd08dbf389acfe8d7624201aec8304e76fb6e15454a788e5ce9ba95e1d94
-  sorbet-runtime (0.6.13433) sha256=55074ef646ed9089ea5cff4e564f2c5d53e629f0d6e681ca7364daabc1ce1e16
-  sorbet-static (0.6.13433-aarch64-linux) sha256=5b9b14489860f6223d3b69d8340b7940a5aacd21c936e8feaf3a3a6054b4aff2
-  sorbet-static (0.6.13433-universal-darwin) sha256=5758c91ee79fe4e94930c85a2621467e9b66a8487174afa55e5883e6069f7e2d
-  sorbet-static (0.6.13433-x86_64-linux) sha256=e920d57e7f9ac0573ec6e68c78365d8995b6e160d6649ec271c3ba7c4daf4899
-  sorbet-static-and-runtime (0.6.13433) sha256=e73e3df6039d1fa744a03aa81e1e08383e4c8d65cc707cfcc2fa112d76ea872a
+  sorbet (0.6.13437) sha256=f530552b3ffd449ea1ac664e722d5c8dc753f172d9e8c18fd679f27874a91d1c
+  sorbet-runtime (0.6.13437) sha256=289e7a9e49d1edd03f046477c11c68318e198eaf9610d031fd5ccb7c490443df
+  sorbet-static (0.6.13437-aarch64-linux) sha256=a955a664fa055706ef2bb0f26f8d8d72362dda240ec5165a522164e54f66d768
+  sorbet-static (0.6.13437-universal-darwin) sha256=c813043dce4dabcced340b545daab89f7b3b3e9fbc3798a769e6dea49a89861c
+  sorbet-static (0.6.13437-x86_64-linux) sha256=7d4ed158440d632a8190e5d047bfa462dcf05a5a9c00819cd9f68ad9441400fd
+  sorbet-static-and-runtime (0.6.13437) sha256=dd215fb53fcc5cad838ca90747158743e03389215d97c2b07dcf36562ee04d5a
   spoom (1.8.7) sha256=81960502cdf23aa991f015988aa5dd43325e23ae4318b8e00d541299cbdb70f6
   stackprof (0.2.28) sha256=4ec2ace02f386012b40ca20ef80c030ad711831f59511da12e83b34efb0f9a04
   tapioca (0.19.2) sha256=938731b07811aee8d23871b1aee8861d464fbaf2cfffbf79a62b0c869a5120ec
