@@ -56,6 +56,7 @@ module Homebrew
       retry_count = 0
       url = "#{Homebrew::EnvConfig.api_domain}/#{endpoint}"
       default_url = "#{HOMEBREW_API_DEFAULT_DOMAIN}/#{endpoint}"
+      primary_url = url
 
       if Homebrew.running_as_root_but_not_owned_by_root? &&
          (!target.exist? || target.empty?)
@@ -75,7 +76,6 @@ module Homebrew
       insecure_download = DevelopmentTools.ca_file_substitution_required? ||
                           DevelopmentTools.curl_substitution_required?
       skip_download = skip_download?(target:, stale_seconds:)
-
       if enqueue
         unless skip_download
           require "download_queue"
@@ -87,11 +87,25 @@ module Homebrew
         return [{}, false]
       end
 
+      etag_path = Pathname("#{target}.etag")
+      new_etag_path = Pathname("#{target}.etag.new")
+
       json_data, from_payload_cache = begin
         download_succeeded = T.let(false, T::Boolean)
         begin
           args = curl_args.dup
-          args.prepend("--time-cond", target.to_s) if target.exist? && !target.empty?
+          use_etag = HOMEBREW_CURL_SUPPORTS_ETAGS && url == primary_url
+          if target.exist? && !target.empty?
+            if use_etag && etag_path.exist? && !etag_path.empty?
+              args.prepend("--etag-compare", etag_path.to_s)
+            else
+              args.prepend("--time-cond", target.to_s)
+            end
+          end
+          if use_etag
+            new_etag_path.unlink if new_etag_path.exist?
+            args.prepend("--etag-save", new_etag_path.to_s)
+          end
           if insecure_download
             opoo DevelopmentTools.insecure_download_warning(endpoint)
             args.append("--insecure")
@@ -99,8 +113,14 @@ module Homebrew
           unless skip_download
             ohai "Downloading #{url}" if $stdout.tty? && !Context.current.quiet?
             # Disable retries here, we handle them ourselves below.
-            Utils::Curl.curl_download(*args, url, to: target, retries: 0, show_error: false)
+            result = Utils::Curl.curl_download(*args, url, to: target, retries: 0, show_error: false)
             download_succeeded = true
+            if use_etag && new_etag_path.exist? && !new_etag_path.empty?
+              FileUtils.mv(new_etag_path, etag_path)
+            elsif etag_path.exist? && result&.stderr&.exclude?("HTTP status: 304")
+              etag_path.unlink
+            end
+            new_etag_path.unlink if new_etag_path.exist?
           end
         rescue ErrorDuringExecution
           if url == default_url

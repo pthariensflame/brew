@@ -32,7 +32,7 @@ RSpec.describe Homebrew::Cmd::Update do
   def setup_update_utils
     (test_root/"Library/Homebrew/utils").mkpath
     FileUtils.ln_s repository_root/"Library/Homebrew/utils.sh", test_root/"Library/Homebrew/utils.sh"
-    %w[api cmd executables formatter lock tty].each do |name|
+    %w[api cmd curl executables formatter lock tty].each do |name|
       FileUtils.ln_s repository_root/"Library/Homebrew/utils/#{name}.sh",
                      test_root/"Library/Homebrew/utils/#{name}.sh"
     end
@@ -153,6 +153,155 @@ RSpec.describe Homebrew::Cmd::Update do
     )
   end
 
+  describe "API ETag revalidation" do
+    let(:cache_path) { test_root/"cache/api/formula.jws.json" }
+    let(:etag_path) { test_root/"cache/api/formula.jws.json.etag" }
+    let(:new_etag_path) { test_root/"cache/api/formula.jws.json.etag.new" }
+    let(:args_file) { test_root/"curl-args.txt" }
+    let(:update_failed_file) { test_root/"update_failed.txt" }
+
+    def fetch_with_curl_response(status_code:, body: "", etag: "", saved_etag: '"old"', curl_supports_etags: "1",
+                                 api_domain: nil)
+      setup_update_utils
+      cache_path.dirname.mkpath
+      cache_path.write "cached"
+      etag_path.write saved_etag if saved_etag
+
+      _stdout, stderr, status = run_update_shell(
+        <<~SH,
+          source "#{update_script}"
+          curl() {
+            printf '%s\\n' "$@" >> "#{args_file}"
+            [[ "${!#}" == "#{api_domain}/"* ]] && return 22
+            local output etag_save
+            while [[ $# -gt 0 ]]
+            do
+              case "$1" in
+                --output) output="$2"; shift ;;
+                --etag-save) etag_save="$2"; shift ;;
+              esac
+              shift
+            done
+            [[ -n "${etag_save}" ]] && printf '%s' '#{etag}' > "${etag_save}"
+            [[ -n '#{body}' ]] && printf '%s' '#{body}' > "${output}"
+            printf '%s' '#{status_code}'
+            return 0
+          }
+          fetch_api_file formula.jws.json "#{update_failed_file}"
+        SH
+        {
+          "HOMEBREW_API_DEFAULT_DOMAIN"  => "https://formulae.example/api",
+          "HOMEBREW_API_DOMAIN"          => api_domain,
+          "HOMEBREW_CACHE"               => (test_root/"cache").to_s,
+          "HOMEBREW_CURL_SPEED_LIMIT"    => "100",
+          "HOMEBREW_CURL_SPEED_TIME"     => "5",
+          "HOMEBREW_CURL_SUPPORTS_ETAGS" => curl_supports_etags,
+          "HOMEBREW_LIBRARY"             => (test_root/"Library").to_s,
+          "HOMEBREW_USER_AGENT_CURL"     => "Homebrew/test",
+        },
+      )
+
+      conditional_flags = %w[--etag-compare --etag-save --time-cond]
+      {
+        success:   status.success? && stderr.empty? && !update_failed_file.exist?,
+        curl_args: args_file.read.lines(chomp: true).each_cons(2).filter_map do |flag, value|
+          [flag, value] if conditional_flags.include?(flag)
+        end,
+        body:      cache_path.read,
+        etag:      (etag_path.read if etag_path.exist?),
+        temp_etag: new_etag_path.exist?,
+      }
+    end
+
+    it "revalidates with the saved ETag and saves the new one with the new body" do
+      expect(fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"')).to eq(
+        success:   true,
+        curl_args: [
+          ["--etag-save", new_etag_path.to_s],
+          ["--etag-compare", etag_path.to_s],
+        ],
+        body:      "fresh",
+        etag:      '"new"',
+        temp_etag: false,
+      )
+    end
+
+    it "keeps the saved ETag when the server answers 304" do
+      expect(fetch_with_curl_response(status_code: 304).except(:curl_args)).to eq(
+        success: true, body: "cached", etag: '"old"', temp_etag: false,
+      )
+    end
+
+    it "removes the saved ETag after a 200 that carries none" do
+      expect(fetch_with_curl_response(status_code: 200, body: "fresh").except(:curl_args)).to eq(
+        success: true, body: "fresh", etag: nil, temp_etag: false,
+      )
+    end
+
+    it "falls back to the time condition without a saved ETag" do
+      expect(fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"', saved_etag: nil)).to eq(
+        success:   true,
+        curl_args: [
+          ["--etag-save", new_etag_path.to_s],
+          ["--time-cond", cache_path.to_s],
+        ],
+        body:      "fresh",
+        etag:      '"new"',
+        temp_etag: false,
+      )
+    end
+
+    it "uses only the time condition when curl is older than 7.68.0" do
+      expect(fetch_with_curl_response(status_code: 200, body: "fresh", curl_supports_etags: nil)).to eq(
+        success:   true,
+        curl_args: [["--time-cond", cache_path.to_s]],
+        body:      "fresh",
+        etag:      nil,
+        temp_etag: false,
+      )
+    end
+
+    it "uses only the time condition on the fallback API domain" do
+      result = fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"',
+                                        api_domain: "https://mirror.example/api")
+      expect(result).to eq(
+        success:   true,
+        curl_args: [
+          ["--etag-save", new_etag_path.to_s],
+          ["--etag-compare", etag_path.to_s],
+          ["--time-cond", cache_path.to_s],
+        ],
+        body:      "fresh",
+        etag:      nil,
+        temp_etag: false,
+      )
+    end
+  end
+
+  it "detects whether curl supports ETag revalidation" do
+    setup_update_utils
+
+    stdout, stderr, status = run_update_shell(
+      <<~SH,
+        source "#{test_root}/Library/Homebrew/utils.sh"
+        source "#{test_root}/Library/Homebrew/utils/curl.sh"
+        HOMEBREW_CURL=curl
+        for version in 7.41.0 7.67.0 7.68.0 8.7.1
+        do
+          unset HOMEBREW_CURL_SUPPORTS_ETAGS
+          curl() { echo "curl ${version} (x86_64-apple-darwin) libcurl/${version}"; }
+          setup-user-agents
+          [[ -n "${HOMEBREW_CURL_SUPPORTS_ETAGS}" ]] && echo "${version}: yes" || echo "${version}: no"
+        done
+      SH
+      { "HOMEBREW_LIBRARY" => (test_root/"Library").to_s },
+    )
+
+    expect([status.success?, stderr, stdout]).to eq(
+      [true, "", "7.41.0: no\n7.67.0: no\n7.68.0: yes\n8.7.1: yes\n"],
+    )
+  end
+
   it "passes all arguments through to delegated upgrades" do
     args_file = test_root/"brew-args.txt"
     brew_wrapper = test_root/"brew-wrapper"
@@ -239,6 +388,56 @@ RSpec.describe Homebrew::Cmd::Update do
     expect(status.success?).to be true
     expect(stderr).to be_empty
     expect(args_file.read).to eq("update-report\n--auto-update\n")
+  end
+
+  it "keeps the current API file's saved ETag when removing other OS versions' API files" do
+    api_internal = test_root/"cache/api/internal"
+    setup_update_utils
+    api_internal.mkpath
+    (test_root/"repository").mkpath
+    %w[
+      packages.arm64_tahoe.jws.json
+      packages.arm64_tahoe.jws.json.etag
+      packages.arm64_sequoia.jws.json
+      packages.arm64_sequoia.jws.json.etag
+    ].each { |name| (api_internal/name).write "x" }
+
+    _stdout, stderr, status = run_update_shell(
+      <<~SH,
+        source "#{update_script}"
+        bottle_tag() { echo arm64_tahoe; }
+        brew() { :; }
+        fetch_api_file() { :; }
+        git_init_if_necessary() { :; }
+        git() {
+          [[ "$1" == "--version" ]] && return 0
+          return 1
+        }
+        lock() { :; }
+        odie() { echo "Error: $*" >&2; exit 1; }
+        ohai() { :; }
+        onoe() { echo "Error: $*" >&2; }
+        safe_cd() { cd "$1" >/dev/null || exit 1; }
+        setup_ca_certificates() { :; }
+        setup_curl() { :; }
+        setup_git() { :; }
+        homebrew-update --auto-update
+      SH
+      {
+        "HOMEBREW_BREW_GIT_REMOTE"     => "https://github.com/Homebrew/brew",
+        "HOMEBREW_CACHE"               => (test_root/"cache").to_s,
+        "HOMEBREW_CELLAR"              => (test_root/"cellar").to_s,
+        "HOMEBREW_LIBRARY"             => (test_root/"Library").to_s,
+        "HOMEBREW_NO_INSTALL_FROM_API" => nil,
+        "HOMEBREW_PREFIX"              => (test_root/"prefix").to_s,
+        "HOMEBREW_REPOSITORY"          => (test_root/"repository").to_s,
+      },
+    )
+
+    expect([status.success?, stderr]).to eq([true, ""])
+    expect(api_internal.children.map { |path| path.basename.to_s }.sort).to eq(
+      %w[packages.arm64_tahoe.jws.json packages.arm64_tahoe.jws.json.etag],
+    )
   end
 
   it "does not query redirected remote metadata for no-op tap updates" do

@@ -9,7 +9,7 @@
 # HOMEBREW_CASK_REPOSITORY, HOMEBREW_CELLAR, HOMEBREW_CORE_DEFAULT_GIT_REMOTE, HOMEBREW_CORE_GIT_REMOTE,
 # HOMEBREW_CORE_REPOSITORY, HOMEBREW_CURL, HOMEBREW_DEV_CMD_RUN, HOMEBREW_FORCE_BREWED_CA_CERTIFICATES,
 # HOMEBREW_FORCE_BREWED_CURL, HOMEBREW_FORCE_BREWED_GIT,
-# HOMEBREW_SYSTEM_CURL_TOO_OLD, HOMEBREW_USER_AGENT_CURL are set by brew.sh
+# HOMEBREW_CURL_SUPPORTS_ETAGS, HOMEBREW_SYSTEM_CURL_TOO_OLD, HOMEBREW_USER_AGENT_CURL are set by brew.sh
 # shellcheck disable=SC2154
 source "${HOMEBREW_LIBRARY}/Homebrew/utils/cmd.sh"
 source "${HOMEBREW_LIBRARY}/Homebrew/utils/api.sh"
@@ -409,6 +409,7 @@ api_curl_download() {
     --fail --compressed --silent \
     --speed-limit "${HOMEBREW_CURL_SPEED_LIMIT}" --speed-time "${HOMEBREW_CURL_SPEED_TIME}" \
     --location --remote-time --output "${cache_path}" \
+    --write-out "%{http_code}" \
     "$@" \
     --user-agent "${HOMEBREW_USER_AGENT_CURL}" \
     "${json_url}"
@@ -443,27 +444,50 @@ fetch_api_file() {
     echo "Checking if we need to fetch ${filename}..."
   fi
 
-  local arg curl_exit_code json_url last_json_url
-  local -a time_cond
+  local etag_path="${cache_path}.etag"
+  local new_etag_path="${cache_path}.etag.new"
+  local arg compare_etag_path curl_exit_code http_code json_url last_json_url
+  local -a etag_args time_cond
   while read -r json_url
   do
+    # ETags are only kept for the first API domain.
+    compare_etag_path=""
+    etag_args=()
+    if [[ -n "${HOMEBREW_CURL_SUPPORTS_ETAGS}" && -z "${last_json_url}" ]]
+    then
+      compare_etag_path="${etag_path}"
+      etag_args=(--etag-save "${new_etag_path}")
+    fi
     time_cond=()
     while read -r arg
     do
       time_cond+=("${arg}")
-    done < <(api_time_cond_args "${cache_path}")
-    api_curl_download "${json_url}" "${cache_path}" "${time_cond[@]}"
+    done < <(api_time_cond_args "${cache_path}" "${compare_etag_path}")
+    rm -f "${new_etag_path}"
+    http_code="$(api_curl_download "${json_url}" "${cache_path}" "${etag_args[@]}" "${time_cond[@]}")"
     curl_exit_code=$?
     # A conditional request can fail with a receive error (curl exit code 56) when
     # an unconditional request for the same URL succeeds, so retry exactly once.
     if [[ ${curl_exit_code} -eq 56 ]] && [[ ${#time_cond[@]} -gt 0 ]]
     then
-      api_curl_download "${json_url}" "${cache_path}"
+      http_code="$(api_curl_download "${json_url}" "${cache_path}" "${etag_args[@]}")"
       curl_exit_code=$?
     fi
     last_json_url="${json_url}"
     [[ ${curl_exit_code} -eq 0 ]] && break
   done < <(api_urls "${filename}")
+
+  if [[ ${curl_exit_code} -eq 0 ]]
+  then
+    if [[ -s "${new_etag_path}" ]]
+    then
+      mv -f "${new_etag_path}" "${etag_path}"
+    elif [[ "${http_code}" != "304" ]]
+    then
+      rm -f "${etag_path}"
+    fi
+  fi
+  rm -f "${new_etag_path}"
 
   if [[ -n ${is_formula_file} ]] && [[ -f "${api_cache}/formula_names.txt" ]]
   then
@@ -1070,7 +1094,7 @@ EOS
     rm -f "${HOMEBREW_CACHE}"/api/internal/formula.*.jws.json
     rm -f "${HOMEBREW_CACHE}"/api/internal/cask.*.jws.json
 
-    # Remove API files (and their `.payload` and `.payload.index` sidecars)
+    # Remove API files (and their sidecars)
     # from previous OS versions, keeping the current OS's so `brew
     # update-report`'s API data load stays or becomes prewarmed. Keep in
     # sync with `cache_files` in Library/Homebrew/cleanup.rb.
@@ -1080,6 +1104,7 @@ EOS
         "${HOMEBREW_CACHE}/api/internal/packages.$(bottle_tag).jws.json") ;;
         "${HOMEBREW_CACHE}/api/internal/packages.$(bottle_tag).jws.json.payload") ;;
         "${HOMEBREW_CACHE}/api/internal/packages.$(bottle_tag).jws.json.payload.index") ;;
+        "${HOMEBREW_CACHE}/api/internal/packages.$(bottle_tag).jws.json.etag") ;;
         *) rm -f "${f}" ;;
       esac
     done

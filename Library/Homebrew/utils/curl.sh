@@ -73,4 +73,9 @@ setup-user-agents() {
   curl_version_output="$("${HOMEBREW_CURL}" --version 2>/dev/null)"
   curl_name_and_version="${curl_version_output%% (*}"
   HOMEBREW_USER_AGENT_CURL="${HOMEBREW_USER_AGENT} ${curl_name_and_version// //}"
+
+  if [[ "$(numeric "${curl_name_and_version##* }")" -ge "$(numeric "7.68.0")" ]]
+  then
+    HOMEBREW_CURL_SUPPORTS_ETAGS=1
+  fi
 }

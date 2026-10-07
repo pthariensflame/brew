@@ -27,10 +27,17 @@ api_curlrc_args() {
 
 api_time_cond_args() {
   local cache_path="$1"
+  local etag_path="$2"
 
   if [[ -s "${cache_path}" ]]
   then
-    echo "--time-cond"
-    echo "${cache_path}"
+    if [[ -s "${etag_path}" ]]
+    then
+      echo "--etag-compare"
+      echo "${etag_path}"
+    else
+      echo "--time-cond"
+      echo "${cache_path}"
+    fi
   fi
 }
