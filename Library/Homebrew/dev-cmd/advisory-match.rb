@@ -309,6 +309,7 @@ module Homebrew
           .returns(T::Hash[String, Homebrew::Vulns::Match::ReconciledHistory])
       }
       def new_record_histories(matcher, formula, hits, emitter, latest_macos:)
+        independent = Homebrew::Vulns::PlatformIndependence.formula?(formula)
         records = hits.to_h { |hit| [matcher.record_id(formula, hit), matcher.to_brew_record(formula, hit)] }
         outcomes = T.let({}, T::Hash[String, T::Array[Homebrew::Vulns::Match::ReconciledHistory]])
         records.each_key { |id| outcomes[id] = [] }
@@ -322,8 +323,12 @@ module Homebrew
 
           Homebrew::SimulateSystem.with(os:, arch:) do
             begin
-              view = index.zero? ? formula : Formulary.factory(formula.path)
-              platform_hits = index.zero? ? hits : matcher.dedup_by_aliases(matcher.advisories_for(view))
+              view = (index.zero? || independent) ? formula : Formulary.factory(formula.path)
+              platform_hits = if index.zero? || independent
+                hits
+              else
+                matcher.dedup_by_aliases(matcher.advisories_for(view))
+              end
             rescue Homebrew::Vulns::OSV::Error
               raise
             rescue => e
@@ -355,7 +360,7 @@ module Homebrew
                 platform_hit = family.fetch(0)
               end
               emitter.record_history_walk
-              outcomes.fetch(id) << matcher.reconcile_history(view, platform_hit)
+              outcomes.fetch(id) << matcher.reconcile_history(view, platform_hit, reuse_platforms: true)
             end
           end
         end

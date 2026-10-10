@@ -3,12 +3,14 @@
 
 require "formula_versions"
 require "simulate_system"
+require "vulns/platform_independence"
 
 module Homebrew
   module Vulns
     # Walks a formula's tap history newest first via {FormulaVersions}. Each
     # instance shares Git facts across platforms for a fixed tap history,
-    # while loaded formulae remain specific to the simulated platform.
+    # while loaded formulae remain specific to the simulated platform unless
+    # their source proves that matching metadata is platform-independent.
     #
     # History that cannot be trusted fails closed: a shallow clone, a formula
     # file with no git history and a revision that cannot be loaded all end the
@@ -30,12 +32,20 @@ module Homebrew
         @rev_lists = T.let({}, T::Hash[String, T::Array[[String, String]]])
         @complete_history = T.let({}, T::Hash[String, T::Boolean])
         @shallow_taps = T.let({}, T::Hash[String, T::Boolean])
+        @platform_independence = T.let({}, T::Hash[[String, String, String], T::Boolean])
+        @independent_formulae = T.let({}.compare_by_identity, T::Hash[Formula, T::Boolean])
+        @shared_formulae = T.let({}, T::Hash[[String, String, String], Formula])
         @load_failures = T.let({}, T::Hash[[String, String, String, String], LoadFailure])
       end
 
       # One diagnostic per formula, revision, path and simulated platform.
       sig { returns(T::Array[LoadFailure]) }
       def load_failures = @load_failures.values
+
+      # Identity is essential: distinct platform views of the same formula
+      # can compare equal, but only a source-proven historical instance may be shared.
+      sig { params(formula: Formula).returns(T::Boolean) }
+      def platform_independent?(formula) = @independent_formulae.key?(formula)
 
       # Yield each loadable historical revision of `formula`, newest first,
       # until the block returns a result. Returns that result,
@@ -46,12 +56,13 @@ module Homebrew
       # A proven absent path is not a build; skip it
       # in complete walks so earlier lifetimes are still observed.
       sig {
-        params(formula:  Formula,
-               complete: T::Boolean,
-               _block:   T.proc.params(old: Formula).returns(T.nilable(T.any(String, Symbol))))
+        params(formula:         Formula,
+               complete:        T::Boolean,
+               reuse_platforms: T::Boolean,
+               _block:          T.proc.params(old: Formula).returns(T.nilable(T.any(String, Symbol))))
           .returns(T.nilable(T.any(String, Symbol)))
       }
-      def walk(formula, complete: false, &_block)
+      def walk(formula, complete: false, reuse_platforms: false, &_block)
         tap = formula.tap!
         tap_key = tap.path.to_s
         return :history_unavailable if @shallow_taps.fetch(tap_key) { @shallow_taps[tap_key] = tap.shallow? }
@@ -83,7 +94,28 @@ module Homebrew
         revs.each do |rev, entry|
           # Wrap the verdict so keeping the walk going (`nil`) stays
           # distinguishable from a revision that failed to load.
-          verdict = fv.formula_at_revision(rev, entry) { |old| [yield(old)] }
+          key = [tap_path, rev, entry]
+          source = T.let(nil, T.nilable(String))
+          independent = reuse_platforms && @platform_independence.fetch(key) do
+            @platform_independence[key] = begin
+              source = Utils.popen_read("git", "-C", tap_key, "cat-file", "blob", "#{rev}:#{entry}", safe: true)
+              PlatformIndependence.source?(source)
+            rescue ErrorDuringExecution
+              false
+            end
+          end
+          shared = independent ? @shared_formulae[key] : nil
+          verdict = if shared
+            [yield(shared)]
+          else
+            fv.formula_at_revision(rev, entry, **(source ? { source: } : {})) do |old|
+              if independent
+                @shared_formulae[key] = old
+                @independent_formulae[old] = true
+              end
+              [yield(old)]
+            end
+          end
           if verdict.nil?
             begin
               next if complete && fv.path_absent_at_revision?(rev, entry)

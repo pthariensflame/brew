@@ -1434,6 +1434,37 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
     end
   end
 
+  it "reuses an independent current formula's hits without additional OSV queries" do
+    stub_osv_hit("CVE-2024-1234", fixed: "2.28.1")
+    allow(requests.path).to receive(:read).and_return(<<~RUBY)
+      class Requests < Formula
+        url "https://files.pythonhosted.org/packages/aa/bb/cc/requests-2.31.0.tar.gz"
+        head "https://github.com/psf/requests.git"
+      end
+    RUBY
+    matcher = Homebrew::Vulns::Match.new
+    allow(Homebrew::Vulns::Match).to receive(:new).and_return(matcher)
+    expect(matcher).to receive(:reconcile_history).with(requests, anything, reuse_platforms: true)
+                                                  .exactly(4).times.and_return(history_result)
+    expect(matcher).not_to receive(:advisories_for)
+    expect(Formulary).not_to receive(:factory).with(requests.path)
+
+    cmd_for("requests", "--json").run
+  end
+
+  it "still stops at the first held platform when the current source is independent" do
+    stub_osv_hit("CVE-2024-1234", fixed: "2.28.1")
+    allow(requests.path).to receive(:read).and_return("class Requests < Formula; end")
+    matcher = Homebrew::Vulns::Match.new
+    allow(Homebrew::Vulns::Match).to receive(:new).and_return(matcher)
+    expect(matcher).to receive(:reconcile_history).with(requests, anything, reuse_platforms: true).once
+                                                  .and_return(history_result(state:   :unresolved,
+                                                                             reasons: [:history_unavailable]))
+    expect(matcher).not_to receive(:advisories_for)
+
+    cmd_for("requests", "--json").run
+  end
+
   it "queries each additional platform once for multiple new candidates" do
     ids = %w[CVE-2024-1234 CVE-2024-5678]
     ids.each { |id| stub_osv_hit(id, fixed: "2.28.1") }
@@ -1502,7 +1533,8 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
         }]
       })
       allow(Homebrew::Vulns::History).to receive(:new).and_return(history)
-      allow(history).to receive(:walk).with(anything, complete: true) do |_, **_, &block|
+      allow(history).to receive(:platform_independent?).and_return(false)
+      allow(history).to receive(:walk).with(anything, complete: true, reuse_platforms: true) do |_, **_, &block|
         linux = Homebrew::SimulateSystem.simulating_or_running_on_linux?
         block.call(resource_formula("2.0", if linux
                      formerly_on_linux ? "1.0" : nil
@@ -1583,7 +1615,8 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
         }]
       })
       allow(Homebrew::Vulns::History).to receive(:new).and_return(history)
-      allow(history).to receive(:walk).with(anything, complete: true) do |_, **_, &block|
+      allow(history).to receive(:platform_independent?).and_return(false)
+      allow(history).to receive(:walk).with(anything, complete: true, reuse_platforms: true) do |_, **_, &block|
         old_formulae.each { |old| block.call(old) }
         nil
       end
@@ -1604,7 +1637,7 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
     end
 
     it "holds a new record when a later platform's complete walk is unavailable" do
-      allow(history).to receive(:walk).with(anything, complete: true) do |_, **_, &block|
+      allow(history).to receive(:walk).with(anything, complete: true, reuse_platforms: true) do |_, **_, &block|
         old_formulae.each { |old| block.call(old) }
         :history_unavailable if Homebrew::SimulateSystem.simulating_or_running_on_linux?
       end

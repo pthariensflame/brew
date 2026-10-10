@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "vulns/history"
+require "vulns/match"
 
 RSpec.describe Homebrew::Vulns::History do
   subject(:history) { described_class.new }
@@ -359,6 +360,198 @@ RSpec.describe Homebrew::Vulns::History do
       Utils.safe_popen_read("git", "-C", dir, "init", "--quiet")
 
       expect(history.walk(requests, complete: true) { nil }).to eq :history_unavailable
+    end
+  end
+
+  context "with platform reuse" do
+    let(:source_path) { "Formula/r/requests.rb" }
+    let(:current_source) do
+      <<~RUBY
+        class Requests < Formula
+          url "https://files.pythonhosted.org/packages/aa/bb/cc/requests-3.0.tar.gz"
+        end
+      RUBY
+    end
+    let(:old_source) { current_source.sub("requests-3.0", "requests-1.0") }
+    let(:platforms) { [[:tahoe, :arm], [:tahoe, :intel], [:linux, :arm], [:linux, :intel]] }
+
+    before do
+      allow(FormulaVersions).to receive(:new).and_call_original
+      allow_any_instance_of(FormulaVersions).to receive(:rev_list)
+        .and_yield("new", source_path).and_yield("old", source_path)
+      allow(Utils).to receive(:popen_read).and_call_original
+      ["new", "old"].zip([current_source, old_source]).each do |revision, source|
+        allow(Utils).to receive(:popen_read).with("git", "cat-file", "blob", "#{revision}:#{source_path}")
+                                            .and_return(source)
+        allow(Utils).to receive(:popen_read)
+          .with("git", "-C", requests.tap!.path.to_s, "cat-file", "blob", "#{revision}:#{source_path}", safe: true)
+          .and_return(source)
+      end
+      allow(Utils).to receive(:popen_read)
+        .with("git", "-C", requests.tap!.path.to_s, "diff-tree", "--root", "--no-commit-id", "--name-only",
+              "--find-renames", "--diff-filter=AR", "-r", "old", safe: true).and_return("#{source_path}\n")
+    end
+
+    def walk_platforms(reuse:)
+      walker = described_class.new
+      platforms.map do |os, arch|
+        versions = []
+        status = Homebrew::SimulateSystem.with(os:, arch:) do
+          walker.walk(requests, complete: true, reuse_platforms: reuse) do |old|
+            versions << [old.pkg_version.to_s, old.resources.map(&:name)]
+            nil
+          end
+        end
+        [status, versions]
+      end
+    end
+
+    def reconciled_platforms(reuse:)
+      matcher = Homebrew::Vulns::Match.new
+      current = Formulary.from_contents("requests", requests.tap_path, current_source)
+      vulnerability = Homebrew::Vulns::Vulnerability.new({
+        "id" => "CVE-2024-1234", "affected" => [{
+          "package" => { "ecosystem" => "PyPI", "name" => "certifi" },
+          "ranges"  => [{ "type" => "ECOSYSTEM", "events" => [{ "introduced" => "0" }, { "fixed" => "2.0" }] }],
+        }]
+      })
+      evidence = Homebrew::Vulns::Match::Evidence.new(
+        strategy: :registry, ecosystem: "PyPI", name: "certifi", resource: "certifi",
+        subject_version: "1.0", key: "pkg:pypi/certifi@1.0"
+      )
+      hit = Homebrew::Vulns::Match::Hit.new(vulnerability:, evidence: [evidence])
+      results = platforms.map do |os, arch|
+        Homebrew::SimulateSystem.with(os:, arch:) do
+          matcher.reconcile_history(current, hit, reuse_platforms: reuse)
+        end
+      end
+      combined = Homebrew::Vulns::Match::ReconciledHistory.combine(results)
+      [combined.state, combined.events, combined.reasons]
+    end
+
+    it "reuses independent revisions with identical observations and fewer formula loads" do
+      loads = 0
+      allow(Formulary).to receive(:from_contents).and_wrap_original do |original, *args, **kwargs|
+        loads += 1
+        original.call(*args, **kwargs)
+      end
+      full = walk_platforms(reuse: false)
+      full_loads = loads
+      loads = 0
+      reused = walk_platforms(reuse: true)
+
+      expect([reused, full_loads, loads]).to eq [full, 8, 2]
+    end
+
+    context "when a removed resource was Linux-only" do
+      let(:old_source) do
+        current_source.sub("requests-3.0", "requests-1.0").sub("\nend", <<~RUBY)
+
+            on_linux do
+              resource "certifi" do
+                url "https://files.pythonhosted.org/packages/aa/bb/cc/certifi-1.0.tar.gz"
+              end
+            end
+          end
+        RUBY
+      end
+
+      it "preserves the removed Linux resource's affected interval with reuse on and off" do
+        full = reconciled_platforms(reuse: false)
+        expect(Formulary).to receive(:from_contents).exactly(6).times.and_call_original
+        reused = reconciled_platforms(reuse: true)
+
+        expect([full, reused]).to eq Array.new(2) {
+          [:range, [{ introduced: "1.0" }, { fixed: "3.0" }], []]
+        }
+      end
+
+      it "reloads the dependent old revision despite an independent current revision" do
+        expect(Formulary).to receive(:from_contents).exactly(5).times.and_call_original
+        expect(walk_platforms(reuse: true)).to eq [
+          [nil, [["3.0", []], ["1.0", []]]], [nil, [["3.0", []], ["1.0", []]]],
+          [nil, [["3.0", []], ["1.0", ["certifi"]]]], [nil, [["3.0", []], ["1.0", ["certifi"]]]]
+        ]
+      end
+    end
+
+    context "when a removed resource was macOS-only" do
+      let(:old_source) do
+        current_source.sub("requests-3.0", "requests-1.0").sub("\nend", <<~RUBY)
+
+            on_macos do
+              resource "certifi" do
+                url "https://files.pythonhosted.org/packages/aa/bb/cc/certifi-1.0.tar.gz"
+              end
+            end
+          end
+        RUBY
+      end
+
+      it "preserves the removed macOS resource's affected interval with reuse on and off" do
+        full = reconciled_platforms(reuse: false)
+        expect(Formulary).to receive(:from_contents).exactly(6).times.and_call_original
+        reused = reconciled_platforms(reuse: true)
+
+        expect([full, reused]).to eq Array.new(2) {
+          [:range, [{ introduced: "1.0" }, { fixed: "3.0" }], []]
+        }
+      end
+
+      it "retains the old macOS resource while reusing only the independent revision" do
+        expect(Formulary).to receive(:from_contents).exactly(5).times.and_call_original
+        expect(walk_platforms(reuse: true)).to eq [
+          [nil, [["3.0", []], ["1.0", ["certifi"]]]], [nil, [["3.0", []], ["1.0", ["certifi"]]]],
+          [nil, [["3.0", []], ["1.0", []]]], [nil, [["3.0", []], ["1.0", []]]]
+        ]
+      end
+    end
+
+    context "when every revision has literal metadata" do
+      let(:old_source) do
+        current_source.sub("requests-3.0", "requests-1.0").sub("\nend", <<~RUBY)
+
+            resource "certifi" do
+              url "https://files.pythonhosted.org/packages/aa/bb/cc/certifi-1.0.tar.gz"
+            end
+          end
+        RUBY
+      end
+
+      it "loads the classified source without reading the same Git blob again" do
+        expect(Utils).not_to receive(:popen_read).with("git", "cat-file", "blob", anything)
+
+        expect(walk_platforms(reuse: true)).to eq Array.new(4) {
+          [nil, [["3.0", []], ["1.0", ["certifi"]]]]
+        }
+      end
+
+      it "does not transfer the independence proof to an equal formula object" do
+        proof = []
+        history.walk(requests, reuse_platforms: true) do |old|
+          proof = [history.platform_independent?(old), history.platform_independent?(old.dup)]
+          :stop
+        end
+
+        expect(proof).to eq [true, false]
+      end
+
+      it "preserves the complete reconciled interval while loading each revision once" do
+        observations = 0
+        allow_any_instance_of(Homebrew::Vulns::Match).to receive(:reconciliation_observation)
+          .and_wrap_original do |original, *args|
+            observations += 1
+            original.call(*args)
+          end
+        full = reconciled_platforms(reuse: false)
+        full_observations = observations
+        observations = 0
+        expect(Formulary).to receive(:from_contents).exactly(3).times.and_call_original
+        reused = reconciled_platforms(reuse: true)
+
+        interval = [:range, [{ introduced: "1.0" }, { fixed: "3.0" }], []]
+        expect([full, reused, full_observations, observations]).to eq [interval, interval, 12, 6]
+      end
     end
   end
 end

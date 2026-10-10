@@ -357,10 +357,11 @@ class FormulaVersions
       .params(
         revision:              String,
         formula_relative_path: String,
+        source:                T.nilable(String),
         _block:                T.proc.params(arg0: Formula).returns(T.type_parameter(:U)),
       ).returns(T.nilable(T.type_parameter(:U)))
   }
-  def formula_at_revision(revision, formula_relative_path = relative_path, &_block)
+  def formula_at_revision(revision, formula_relative_path = relative_path, source: nil, &_block)
     @load_error = nil
     Homebrew.raise_deprecation_exceptions = true
     LegacyMacOS.simulated_target = @simulated_target
@@ -372,7 +373,7 @@ class FormulaVersions
         Formulary.from_contents(
           name,
           path,
-          file_contents_at_revision(revision, formula_relative_path)
+          (source || file_contents_at_revision(revision, formula_relative_path))
             .sub(/\A(?:(?:[ \t]*#[^\n]*\n|[ \t]*\n)|(?:=begin[^\n]*(?:\n|\z).*?^=end[^\n]*(?:\n|\z)))*/m) do |header|
               "#{header}Formula = ScriptFileFormula = ::FormulaVersions.legacy_formula_class;"
             end,

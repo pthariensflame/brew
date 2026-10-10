@@ -50,6 +50,12 @@ Existing reviewed ranges are preserved rather than replaced with guessed introdu
 `--no-history` explicitly uses unverified zero/current-version boundaries for new ranges and cannot be combined with `--new-history`.
 It is an unchecked authoring mode, not a way to validate a skipped candidate.
 
+New-record history can reuse a revision's loaded matching metadata across platforms when parsing that revision proves that its declarations are platform-independent.
+A conservative allowlist accepts literal source, resource and patch metadata; unknown DSL, helper-derived values and platform conditionals retain separate platform loads.
+The current formula is checked separately before reusing its advisory queries, and older revisions are always classified individually.
+Shared historical observations remain bound to the same upstream evidence and alias family.
+This optimisation does not change existing-record reconciliation or the early stop for candidates requiring review.
+
 `--rejected-candidates=<file>` requires `--output` and reads an explicit local rejection list; it never fetches one.
 The file contains exact, case-sensitive record IDs, one per line, with `#` comments, surrounding whitespace and blank lines ignored.
 With history enabled, listed new comparable candidates are skipped before additional platform queries or history walks, and their count and IDs are reported.
