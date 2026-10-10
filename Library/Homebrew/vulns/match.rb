@@ -44,13 +44,88 @@ module Homebrew
         T::Hash[Symbol, String],
       )
 
-      # A single-platform history decision, not permission to replace a stored
-      # record. Callers must also validate its provenance and other platforms.
+      # An affected Homebrew interval. A missing fix leaves the interval open.
+      class Interval < T::Struct
+        const :introduced, String
+        const :fixed, T.nilable(String)
+
+        sig { returns(T::Boolean) }
+        def valid?
+          return false if introduced.blank?
+
+          introduced_version = PkgVersion.parse(introduced)
+          fixed = self.fixed
+          return true if fixed.nil?
+
+          fixed.present? && introduced_version < PkgVersion.parse(fixed)
+        rescue ArgumentError
+          false
+        end
+
+        sig { returns(T::Array[T::Hash[Symbol, String]]) }
+        def events
+          events = T.let([{ introduced: }], T::Array[T::Hash[Symbol, String]])
+          fixed = self.fixed
+          events << { fixed: } if fixed
+          events
+        end
+
+        # Union copies and platforms before choosing Homebrew label boundaries.
+        sig { params(intervals: T::Array[Interval]).returns(T::Array[Interval]) }
+        def self.union(intervals)
+          merged = T.let([], T::Array[Interval])
+          intervals.sort_by { |interval| PkgVersion.parse(interval.introduced) }
+                   .each_with_object(merged) do |interval, merged|
+            previous = merged.last
+            if previous.nil?
+              merged << interval
+            elsif (fixed = previous.fixed)
+              if PkgVersion.parse(interval.introduced) > PkgVersion.parse(fixed)
+                merged << interval
+              else
+                last_fixed = interval.fixed
+                last_fixed = fixed if last_fixed && PkgVersion.parse(last_fixed) < PkgVersion.parse(fixed)
+                merged[-1] = previous.with(fixed: last_fixed)
+              end
+            end
+          end
+        end
+      end
+
+      # A history decision, not permission to replace a stored record. Callers
+      # must also validate its provenance and observe every required platform.
       class ReconciledHistory < T::Struct
         const :state, Symbol
-        const :introduced, T.nilable(String)
-        const :fixed, T.nilable(String)
+        const :intervals, T::Array[Interval], default: []
         const :reasons, T::Array[Symbol]
+
+        sig { returns(T.nilable(String)) }
+        def introduced = intervals.first&.introduced
+
+        sig { returns(T.nilable(String)) }
+        def fixed = intervals.last&.fixed
+
+        sig { returns(T::Array[T::Hash[Symbol, String]]) }
+        def events = intervals.flat_map(&:events)
+
+        sig { params(results: T::Array[ReconciledHistory]).returns(ReconciledHistory) }
+        def self.combine(results)
+          reasons = results.flat_map(&:reasons)
+          reasons << :preserved if results.any? { |result| result.state == :preserved }
+          if (results.empty? || results.any? do |result|
+            [:range, :never_affected].exclude?(result.state)
+          end) && reasons.empty?
+            reasons << :unsupported_result
+          end
+          ranges = results.select { |result| result.state == :range }
+          if ranges.any? { |result| result.intervals.empty? || result.intervals.any? { |interval| !interval.valid? } }
+            reasons << :invalid_interval
+          end
+          return new(state: :unresolved, reasons: reasons.uniq.sort) if reasons.any?
+
+          intervals = Interval.union(ranges.flat_map(&:intervals))
+          new(state: intervals.empty? ? :never_affected : :range, intervals:, reasons: [])
+        end
       end
 
       class HistoricalObservation < T::Struct
@@ -705,21 +780,28 @@ module Homebrew
       # `affected? == true` (or no comparable range) emits no `fixed` event and
       # `fix: null`. As with {OsvExport.record_for}, {OsvExport.merge_existing}
       # preserves on-disk `ranges` on rewrite so a hand-corrected boundary
-      # sticks.
+      # sticks. With `history`, emit all reconstructed intervals and derive
+      # fix metadata from the last interval, including a final open interval.
       sig {
         params(formula: Formula, hit: Hit, first_fixed: T.nilable(String),
-               first_introduced: T.nilable(String), now: Time)
+               first_introduced: T.nilable(String), history: T.nilable(ReconciledHistory), now: Time)
           .returns(T::Hash[Symbol, T.untyped])
       }
-      def to_brew_record(formula, hit, first_fixed: nil, first_introduced: nil, now: Time.now.utc)
+      def to_brew_record(formula, hit, first_fixed: nil, first_introduced: nil, history: nil, now: Time.now.utc)
         vuln = hit.vulnerability
         timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         status, status_evidence = range_status(hit, formula_name: formula.name)
 
-        fixed = first_fixed
-        fixed ||= formula.pkg_version.to_s if status&.fixed?
-        events = T.let([{ introduced: first_introduced || "0" }], T::Array[T::Hash[Symbol, String]])
-        events << { fixed: } if fixed
+        if history && (history.state != :range || history.intervals.empty? ||
+                       history.intervals.any? { |interval| !interval.valid? })
+          raise ArgumentError, "Candidate history must contain valid affected intervals"
+        end
+
+        fixed = history ? history.fixed : first_fixed
+        fixed ||= formula.pkg_version.to_s if !history && status&.fixed?
+        events = T.let(history ? history.events : [{ introduced: first_introduced || "0" }],
+                       T::Array[T::Hash[Symbol, String]])
+        events << { fixed: } if !history && fixed
 
         record = T.let({
           schema_version:    OsvExport::SCHEMA_VERSION,
@@ -735,6 +817,10 @@ module Homebrew
             upstream_evidence: hit.evidence.map { |e| e.to_h.except(:advisory, :source_record).compact }.uniq,
           },
         }, T::Hash[Symbol, T.untyped])
+
+        if history
+          record.fetch(:affected).fetch(0).fetch(:ecosystem_specific)[:range_state] = fixed ? "fixed" : "affected"
+        end
 
         if status.nil? && current_prerelease_boundary?(hit)
           record[:database_specific][:review_reason] = "prerelease_boundary"
@@ -855,9 +941,9 @@ module Homebrew
         result || :never_affected
       end
 
-      # Reconstruct one representable affected interval from complete history.
-      # Callers may only reconcile matched records; generated patch-fix records
-      # must retain their annotation-based ranges.
+      # Reconstruct every representable affected interval from complete history.
+      # Callers can emit new candidates or reconcile matched records; generated
+      # patch-fix records must retain their annotation-based ranges.
       # Unlike first_fixed_version, this must visit builds before the first
       # transition, including below-introduced versions and removed resources.
       # An unresolved or protected result never supplies replacement boundaries.
@@ -889,30 +975,34 @@ module Homebrew
           reasons << :upstream_override_requires_review
         end
 
-        affected = observations.select { |row| row.state == :affected }.map(&:version)
-        unaffected = observations.select { |row| [:fixed, :not_applicable].include?(row.state) }.map(&:version)
-        introduced = affected.min
-        last_affected = affected.max
-        fixed = T.let(nil, T.nilable(PkgVersion))
-        if introduced && last_affected
-          fixed = unaffected.select { |version| version > last_affected }.min
-          if unaffected.any? { |version| version.between?(introduced, last_affected) }
-            reasons << :unrepresentable_interval
+        intervals = T.let([], T::Array[Interval])
+        observations.sort_by(&:version).chunk_while { |left, right| left.version == right.version }.each do |builds|
+          version = builds.fetch(0).version
+          previous = intervals.last
+          if builds.any? { |build| build.state == :affected }
+            intervals << Interval.new(introduced: version.to_s) if previous.nil? || previous.fixed
+          elsif previous && previous.fixed.nil?
+            intervals[-1] = previous.with(fixed: version.to_s)
           end
-          reasons << :unrepresentable_interval if fixed.nil? && observations.fetch(0).state != :affected
+        end
+        if intervals.last&.fixed.nil? && intervals.any? &&
+           observations.none? { |row| row.version == formula.pkg_version && row.state == :affected }
+          reasons << :unrepresentable_interval
         end
 
         if observations.any? do |row|
-          row.patched && (!introduced ||
-            (row.version >= introduced && (!fixed || row.version <= fixed)))
+          row.patched && (intervals.empty? || intervals.any? do |interval|
+            fixed = interval.fixed
+            row.version >= PkgVersion.parse(interval.introduced) && (!fixed || row.version <= PkgVersion.parse(fixed))
+          end)
         end
           reasons << :advisory_patch_requires_review
         end
 
         return ReconciledHistory.new(state: :unresolved, reasons: reasons.uniq.sort) if reasons.any?
-        return ReconciledHistory.new(state: :never_affected, reasons: []) unless introduced
+        return ReconciledHistory.new(state: :never_affected, reasons: []) if intervals.empty?
 
-        ReconciledHistory.new(state: :range, introduced: introduced.to_s, fixed: fixed&.to_s, reasons: [])
+        ReconciledHistory.new(state: :range, intervals:, reasons: [])
       end
 
       # Preserve disagreements within an upstream alias family and unknown

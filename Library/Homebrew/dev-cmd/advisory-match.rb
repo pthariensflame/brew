@@ -127,6 +127,7 @@ module Homebrew
                   next
                 end
 
+                new_histories = T.let({}, T::Hash[String, Homebrew::Vulns::Match::ReconciledHistory])
                 actionable.each do |hit, status|
                   record_id = matcher.record_id(formula, hit)
                   next if emitter.alias_protected?(record_id)
@@ -156,6 +157,35 @@ module Homebrew
                            "skipping automatic update. Review its ranges and provenance together."
                       next
                     end
+                  end
+
+                  if initial_introduction
+                    if new_histories.empty?
+                      new_hits = actionable.filter_map do |candidate_hit, candidate_status|
+                        id = matcher.record_id(formula, candidate_hit)
+                        next if !candidate_status || emitter.alias_protected?(id) || emitter.reviewed_range_state(id)
+
+                        candidate_hit
+                      end
+                      new_histories = new_record_histories(matcher, formula, new_hits, emitter, latest_macos:)
+                    end
+                    history = new_histories.fetch(record_id)
+                    next if history.state == :never_affected
+
+                    if history.state != :range
+                      emitter.record_history_unavailable(formula.name)
+                      reason = if history.reasons.include?(:history_unavailable)
+                        "formula history is unavailable"
+                      else
+                        "complete history requires review"
+                      end
+                      opoo "#{record_id}: #{reason} (#{history.reasons.join(", ")}); skipping automatic update"
+                      next
+                    end
+                    candidate = matcher.to_brew_record(formula, hit, history:)
+                    revalidated = !history.fixed.nil? && !override&.fixed_in_overridden
+                    emitter.emit(candidate, revalidated:, initial_introduction: true)
+                    next
                   end
 
                   has_open_range = reviewed_state == :open
@@ -199,20 +229,6 @@ module Homebrew
                   end
 
                   first_introduced = T.let(nil, T.nilable(String))
-                  if initial_introduction
-                    emitter.record_history_walk
-                    introduced = matcher.first_introduced_version(formula, hit, first_fixed: fixed_boundary)
-                    case introduced
-                    when String
-                      first_introduced = introduced
-                    when :history_unavailable
-                      emitter.record_history_unavailable(formula.name)
-                      opoo "#{record_id}: affected introduction cannot be established; skipping automatic update"
-                      next
-                    else
-                      raise TypeError, "unexpected introduction-history result: #{introduced.inspect}"
-                    end
-                  end
                   if status&.affected? && has_terminal_range
                     emitter.record_history_walk
                     reintroduced = matcher.first_reintroduced_version(formula, hit)
@@ -250,6 +266,67 @@ module Homebrew
             report_history_load_failures(matcher) if args.reconcile_history?
           end
         end
+      end
+
+      # Query each platform once per formula. Stop visiting platforms for a
+      # candidate as soon as its history or provenance requires review.
+      sig {
+        params(matcher: Homebrew::Vulns::Match, formula: Formula, hits: T::Array[Homebrew::Vulns::Match::Hit],
+               emitter: Emitter, latest_macos: Symbol)
+          .returns(T::Hash[String, Homebrew::Vulns::Match::ReconciledHistory])
+      }
+      def new_record_histories(matcher, formula, hits, emitter, latest_macos:)
+        records = hits.to_h { |hit| [matcher.record_id(formula, hit), matcher.to_brew_record(formula, hit)] }
+        outcomes = T.let({}, T::Hash[String, T::Array[Homebrew::Vulns::Match::ReconciledHistory]])
+        records.each_key { |id| outcomes[id] = [] }
+        [[latest_macos, :arm], [latest_macos, :intel], [:linux, :arm], [:linux, :intel]]
+          .each_with_index do |(os, arch), index|
+          pending = hits.select do |hit|
+            outcomes.fetch(matcher.record_id(formula, hit))
+                    .all? { |result| [:range, :never_affected].include?(result.state) }
+          end
+          break if pending.empty?
+
+          Homebrew::SimulateSystem.with(os:, arch:) do
+            begin
+              view = index.zero? ? formula : Formulary.factory(formula.path)
+              platform_hits = index.zero? ? hits : matcher.dedup_by_aliases(matcher.advisories_for(view))
+            rescue Homebrew::Vulns::OSV::Error
+              raise
+            rescue => e
+              pending.each do |hit|
+                outcomes.fetch(matcher.record_id(formula, hit)) << Homebrew::Vulns::Match::ReconciledHistory.new(
+                  state: :unresolved, reasons: [:platform_unavailable],
+                )
+              end
+              opoo "#{formula.name} (#{os}/#{arch}): #{e.message}"
+              next
+            end
+            pending.each do |hit|
+              id = matcher.record_id(formula, hit)
+              family = platform_hits.select { |other| other.identifiers.intersect?(hit.identifiers) }
+              # Missing query results alone never prove absence. A resource-only
+              # hit can reuse its upstream constraints when every subject is
+              # demonstrably absent; the full walk still checks older builds.
+              absent_resources = family.empty? && hit.evidence.present? && hit.evidence.all? do |evidence|
+                evidence.resource && !matcher.subject_version_at(view, evidence).first
+              end
+              if absent_resources
+                platform_hit = hit
+              elsif platform_provenance_changed?(matcher, emitter, records.fetch(id), view, family)
+                outcomes.fetch(id) << Homebrew::Vulns::Match::ReconciledHistory.new(
+                  state: :unresolved, reasons: [:platform_provenance_changed],
+                )
+                next
+              else
+                platform_hit = family.fetch(0)
+              end
+              emitter.record_history_walk
+              outcomes.fetch(id) << matcher.reconcile_history(view, platform_hit)
+            end
+          end
+        end
+        outcomes.transform_values { |results| Homebrew::Vulns::Match::ReconciledHistory.combine(results) }
       end
 
       sig { params(matcher: Homebrew::Vulns::Match).void }
@@ -334,7 +411,7 @@ module Homebrew
             rescue => e
               pending.each_key do |id|
                 outcomes.fetch(id) << Homebrew::Vulns::Match::ReconciledHistory.new(
-                  state: :unresolved, introduced: nil, fixed: nil, reasons: [:platform_unavailable],
+                  state: :unresolved, reasons: [:platform_unavailable],
                 )
               end
               opoo "#{formula.name} (#{os}/#{arch}): #{e.message}"
@@ -344,7 +421,7 @@ module Homebrew
               family = platform_hits.select { |hit| hit.identifiers.intersect?(record.fetch(:upstream)) }
               if platform_provenance_changed?(matcher, emitter, record, view, family)
                 result = Homebrew::Vulns::Match::ReconciledHistory.new(
-                  state: :unresolved, introduced: nil, fixed: nil, reasons: [:platform_provenance_changed],
+                  state: :unresolved, reasons: [:platform_provenance_changed],
                 )
               else
                 hit = family.fetch(0)
@@ -363,14 +440,11 @@ module Homebrew
           results = outcomes.fetch(id)
           reasons = results.flat_map(&:reasons)
           reasons << :preserved if results.any? { |result| result.state == :preserved }
-          decisions = results.map { |result| [result.state, result.introduced, result.fixed] }.uniq
-          if reasons.empty? && (results.length != platforms.length || !decisions.one?)
-            reasons << :platform_disagreement
-          end
+          reasons << :platform_unavailable if results.length != platforms.length
           if reasons.any?
             emitter.skip_reconciliation(id, reasons.uniq)
           else
-            emitter.reconcile(record, results.fetch(0))
+            emitter.reconcile(record, Homebrew::Vulns::Match::ReconciledHistory.combine(results))
           end
         end
       rescue Homebrew::Vulns::OSV::Error => e
@@ -381,7 +455,7 @@ module Homebrew
       # carrying its stored upstream family with the same matching provenance;
       # anything else means the stored ranges cannot be compared across views.
       sig {
-        params(matcher: Homebrew::Vulns::Match, emitter: DirEmitter, record: T::Hash[Symbol, T.untyped],
+        params(matcher: Homebrew::Vulns::Match, emitter: Emitter, record: T::Hash[Symbol, T.untyped],
                view: Formula, family: T::Array[Homebrew::Vulns::Match::Hit]).returns(T::Boolean)
       }
       def platform_provenance_changed?(matcher, emitter, record, view, family)
@@ -480,6 +554,61 @@ module Homebrew
 
         sig { params(_record_id: String).returns(T::Boolean) }
         def alias_protected?(_record_id) = false
+
+        # Keep every strategy and runtime subject. Ignore version values and
+        # resource labels, but retain checkability and separate copies of the
+        # same resource package: either can change the aggregate history.
+        sig { params(record: T::Hash[T.untyped, T.untyped]).returns(T::Hash[String, T.untyped]) }
+        def range_basis(record)
+          record = JSON.parse(JSON.generate(record))
+          affected = record["affected"]
+          return {} unless affected.is_a?(Array)
+          return {} unless affected.one?
+
+          entry = affected.fetch(0)
+          return {} unless entry.is_a?(Hash)
+
+          ecosystem_specific = entry["ecosystem_specific"]
+          ecosystem_specific = {} unless ecosystem_specific.is_a?(Hash)
+
+          database_specific = record["database_specific"]
+          evidence = Array(database_specific["upstream_evidence"]) if database_specific.is_a?(Hash)
+          evidence = Array(evidence).grep(Hash)
+          subjects = evidence.group_by { |row| row["resource"] }.map do |resource, rows|
+            identities = rows.filter_map do |row|
+              identity = subject_identity(row)
+              next if identity.empty?
+
+              [row["strategy"].to_s, identity, row["subject_version"].nil? ? "unknown" : "versioned"]
+            end
+            [resource ? "resource" : "primary", identities.uniq.sort]
+          end
+          basis = { "subjects" => subjects.sort }
+          resource_purl = ecosystem_specific["resource_purl"]
+          if resource_purl.is_a?(String)
+            resource = evidence.find { |row| row["resource"] && row["key"] == resource_purl }
+            basis["resource_purl"] = resource ? subject_identity(resource) : [unversioned_key(resource_purl)]
+          end
+          upstream_fixed_in = ecosystem_specific["upstream_fixed_in"]
+          basis["upstream_fixed_in"] = upstream_fixed_in if upstream_fixed_in.is_a?(String)
+          basis
+        end
+
+        sig { params(evidence: T::Hash[String, T.untyped]).returns(T::Array[String]) }
+        def subject_identity(evidence)
+          ecosystem = evidence["ecosystem"]
+          name = evidence["name"]
+          return [ecosystem, name] if ecosystem.is_a?(String) && name.is_a?(String)
+
+          key = evidence["key"]
+          key.is_a?(String) ? [unversioned_key(key)] : []
+        end
+
+        sig { params(key: String).returns(String) }
+        def unversioned_key(key)
+          key = key.delete_prefix("upstream:")
+          key.start_with?("pkg:") ? key.sub(%r{@[^/@]*\z}, "") : key
+        end
 
         sig { params(_record: T::Hash[Symbol, T.untyped]).returns(T::Boolean) }
         def range_basis_changed?(_record) = false
@@ -652,7 +781,7 @@ module Homebrew
             record = alias_record(path)
             next unless record.is_a?(Hash)
             next unless reconcilable_record?(record)
-            next unless single_terminal_range?(record)
+            next unless terminal_intervals(record)
             next if affected_formula_names(record) != [formula_name]
             next if record["id"] != File.basename(path, ".json")
 
@@ -705,7 +834,7 @@ module Homebrew
             skip_reconciliation(id, [:unsupported_record])
             return
           end
-          unless single_terminal_range?(existing)
+          unless terminal_intervals(existing)
             skip_reconciliation(id, [:unsupported_range])
             return
           end
@@ -726,23 +855,44 @@ module Homebrew
             existing.dig("affected", 0, "ecosystem_specific", "fix") == "bump"
         end
 
-        # Exactly one ECOSYSTEM range holding an `introduced` and a `fixed`
-        # event, each a non-blank string.
-        sig { params(existing: T::Hash[String, T.untyped]).returns(T::Boolean) }
-        def single_terminal_range?(existing)
+        # Only complete introduced/fixed pairs can be automatically narrowed.
+        # Other event types and range metadata remain protected for review.
+        sig {
+          params(existing: T::Hash[String, T.untyped])
+            .returns(T.nilable(T::Array[Homebrew::Vulns::Match::Interval]))
+        }
+        def terminal_intervals(existing)
           ranges = existing.dig("affected", 0, "ranges")
-          return false if !ranges.is_a?(Array) || !ranges.one?
+          return if !ranges.is_a?(Array) || ranges.empty?
 
-          range = ranges.fetch(0)
-          return false if !range.is_a?(Hash) || range["type"] != "ECOSYSTEM"
+          intervals = T.let([], T::Array[Homebrew::Vulns::Match::Interval])
+          ranges.each do |range|
+            return nil if !range.is_a?(Hash) || range["type"] != "ECOSYSTEM"
+            return nil if (range.keys - %w[type events]).any?
 
-          events = range["events"]
-          return false if !events.is_a?(Array) || events.length != 2
+            events = range["events"]
+            return nil if !events.is_a?(Array) || events.empty? || events.length.odd?
 
-          introduced, fixed = events
-          introduced.is_a?(Hash) && introduced.keys == ["introduced"] && introduced["introduced"].is_a?(String) &&
-            introduced["introduced"].present? &&
-            fixed.is_a?(Hash) && fixed.keys == ["fixed"] && fixed["fixed"].is_a?(String) && fixed["fixed"].present?
+            previous_fixed = T.let(nil, T.nilable(String))
+            events.each_slice(2) do |introduced, fixed|
+              return nil if !introduced.is_a?(Hash) || introduced.keys != ["introduced"]
+              return nil if !fixed.is_a?(Hash) || fixed.keys != ["fixed"]
+
+              first = introduced["introduced"]
+              last = fixed["fixed"]
+              return nil if !first.is_a?(String) || !last.is_a?(String)
+
+              interval = Homebrew::Vulns::Match::Interval.new(introduced: first, fixed: last)
+              return nil unless interval.valid?
+              return nil if previous_fixed && PkgVersion.parse(first) < PkgVersion.parse(previous_fixed)
+
+              intervals << interval
+              previous_fixed = last
+            end
+          end
+          Homebrew::Vulns::Match::Interval.union(intervals)
+        rescue ArgumentError
+          nil
         end
 
         # The stored record must still be reached through the same upstream
@@ -771,29 +921,37 @@ module Homebrew
           id = record.fetch(:id)
           path = alias_target_paths(id).fetch(0)
           updated = existing.deep_dup
-          if result.state == :range && (introduced = result.introduced) && (fixed = result.fixed)
-            events = existing.fetch("affected").fetch(0).fetch("ranges").fetch(0).fetch("events")
-            old_introduced = PkgVersion.parse(events.fetch(0).fetch("introduced"))
-            old_fixed = PkgVersion.parse(events.fetch(1).fetch("fixed"))
-            if PkgVersion.parse(introduced) >= PkgVersion.parse(fixed)
+          if result.state == :range
+            if result.intervals.empty? || result.intervals.any? { |interval| !interval.valid? }
               skip_reconciliation(id, [:invalid_interval])
               return
             end
-            if PkgVersion.parse(introduced) < old_introduced || PkgVersion.parse(fixed) > old_fixed
+            if result.intervals.any? { |interval| interval.fixed.nil? }
+              skip_reconciliation(id, [:reopened])
+              return
+            end
+            reviewed = terminal_intervals(existing)
+            return unless reviewed
+
+            if result.intervals.any? do |interval|
+              reviewed.none? do |old|
+                fixed = interval.fixed
+                old_fixed = old.fixed
+                fixed && old_fixed && PkgVersion.parse(interval.introduced) >= PkgVersion.parse(old.introduced) &&
+                PkgVersion.parse(fixed) <= PkgVersion.parse(old_fixed)
+              end
+            end
               skip_reconciliation(id, [:range_expansion])
               return
             end
-            updated.fetch("affected").fetch(0).fetch("ranges").fetch(0)["events"] = [
-              { "introduced" => introduced }, { "fixed" => fixed }
-            ]
-            if updated == existing
+            if result.events == reviewed.flat_map(&:events)
               @unchanged += 1
               return
             end
+            updated.fetch("affected").fetch(0)["ranges"] = [
+              { "type" => "ECOSYSTEM", "events" => result.events },
+            ]
             updated["modified"] = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-          elsif result.state == :range && result.fixed.nil?
-            skip_reconciliation(id, [:reopened])
-            return
           elsif result.state != :never_affected
             skip_reconciliation(id, result.reasons.presence || [:unsupported_result])
             return
@@ -878,61 +1036,6 @@ module Homebrew
             puts "  wrote #{path}" if @verbose
             @written += 1
           end
-        end
-
-        # Keep every strategy and runtime subject. Ignore version values and
-        # resource labels, but retain checkability and separate copies of the
-        # same resource package: either can change the aggregate history.
-        sig { params(record: T::Hash[T.untyped, T.untyped]).returns(T::Hash[String, T.untyped]) }
-        def range_basis(record)
-          record = JSON.parse(JSON.generate(record))
-          affected = record["affected"]
-          return {} unless affected.is_a?(Array)
-          return {} unless affected.one?
-
-          entry = affected.fetch(0)
-          return {} unless entry.is_a?(Hash)
-
-          ecosystem_specific = entry["ecosystem_specific"]
-          ecosystem_specific = {} unless ecosystem_specific.is_a?(Hash)
-
-          database_specific = record["database_specific"]
-          evidence = Array(database_specific["upstream_evidence"]) if database_specific.is_a?(Hash)
-          evidence = Array(evidence).grep(Hash)
-          subjects = evidence.group_by { |row| row["resource"] }.map do |resource, rows|
-            identities = rows.filter_map do |row|
-              identity = subject_identity(row)
-              next if identity.empty?
-
-              [row["strategy"].to_s, identity, row["subject_version"].nil? ? "unknown" : "versioned"]
-            end
-            [resource ? "resource" : "primary", identities.uniq.sort]
-          end
-          basis = { "subjects" => subjects.sort }
-          resource_purl = ecosystem_specific["resource_purl"]
-          if resource_purl.is_a?(String)
-            resource = evidence.find { |row| row["resource"] && row["key"] == resource_purl }
-            basis["resource_purl"] = resource ? subject_identity(resource) : [unversioned_key(resource_purl)]
-          end
-          upstream_fixed_in = ecosystem_specific["upstream_fixed_in"]
-          basis["upstream_fixed_in"] = upstream_fixed_in if upstream_fixed_in.is_a?(String)
-          basis
-        end
-
-        sig { params(evidence: T::Hash[String, T.untyped]).returns(T::Array[String]) }
-        def subject_identity(evidence)
-          ecosystem = evidence["ecosystem"]
-          name = evidence["name"]
-          return [ecosystem, name] if ecosystem.is_a?(String) && name.is_a?(String)
-
-          key = evidence["key"]
-          key.is_a?(String) ? [unversioned_key(key)] : []
-        end
-
-        sig { params(key: String).returns(String) }
-        def unversioned_key(key)
-          key = key.delete_prefix("upstream:")
-          key.start_with?("pkg:") ? key.sub(%r{@[^/@]*\z}, "") : key
         end
 
         sig { override.params(record_id: String).returns(T::Boolean) }

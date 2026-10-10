@@ -120,9 +120,17 @@ module Homebrew
           record[:published] = existing_published
         end
         affected_records = Array(record[:affected])
+        # Complete histories are not single boundary transitions. Only an
+        # initial repair may copy their events into unreviewed ranges.
+        if close_open_ranges && !initial_introduction &&
+           affected_records.any? { |affected| multiple_intervals?(affected[:ranges]) }
+          return
+        end
+
         invalid_transition = affected_records.each_with_index.any? do |affected, index|
           existing_ranges = existing.dig("affected", index, "ranges")
           next false unless existing_ranges
+          next false if initial_introduction && multiple_intervals?(affected[:ranges])
 
           close_open_ranges && (
             ((fixed = explicit_fixed(affected[:ranges])) && !fixed_follows?(existing_ranges, fixed)) ||
@@ -244,6 +252,17 @@ module Homebrew
         return incoming_ranges if !existing_ranges.is_a?(Array) || existing_ranges.empty?
 
         incoming_ranges = Array(incoming_ranges)
+        if initial_introduction && multiple_intervals?(incoming_ranges)
+          return existing_ranges.map.with_index do |range, index|
+            next range if range_state(range) != :invalid
+
+            replacement = incoming_ranges[index] || incoming_ranges.first
+            next range unless replacement
+            next replacement unless range.is_a?(Hash)
+
+            range.merge("events" => replacement[:events] || replacement["events"])
+          end
+        end
         fixed = incoming_ranges.filter_map do |range|
           Array(range[:events] || range["events"]).rfind do |event|
             event.is_a?(Hash) && (event.key?(:fixed) || event.key?("fixed"))
@@ -305,6 +324,18 @@ module Homebrew
         end
       end
       private_class_method :merge_range_transitions
+
+      sig { params(ranges: T.untyped).returns(T::Boolean) }
+      def self.multiple_intervals?(ranges)
+        Array(ranges).sum do |range|
+          next 0 unless range.is_a?(Hash)
+
+          Array(range[:events] || range["events"]).count do |event|
+            event.is_a?(Hash) && (event.key?(:introduced) || event.key?("introduced"))
+          end
+        end > 1
+      end
+      private_class_method :multiple_intervals?
 
       sig { params(range: T.untyped).returns(Symbol) }
       def self.range_state(range)

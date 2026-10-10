@@ -55,6 +55,42 @@ RSpec.describe Homebrew::Vulns::OsvExport do
   end
 
   describe ".merge_existing" do
+    it "repairs split initial history without truncating it or closing reviewed open ranges" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "BREW-x-CVE-1.json")
+        reviewed = [{ "introduced" => "2.5" }]
+        File.write(path, JSON.generate({
+          "id" => "BREW-x-CVE-1", "affected" => [{ "ranges" => [
+            { "type" => "ECOSYSTEM", "events" => reviewed },
+            { "type" => "ECOSYSTEM", "events" => [] },
+          ] }]
+        }))
+        events = [{ introduced: "1.0" }, { fixed: "2.0" }, { introduced: "3.0" }]
+        incoming = { id: "BREW-x-CVE-1", affected: [{ ranges: [{ type: "ECOSYSTEM", events: }] }] }
+        merged = described_class.merge_existing(path, incoming, close_open_ranges: true, initial_introduction: true)
+
+        expect(JSON.parse(JSON.generate(merged))&.dig("affected", 0, "ranges")).to eq [
+          { "type" => "ECOSYSTEM", "events" => reviewed },
+          { "type" => "ECOSYSTEM", "events" => JSON.parse(JSON.generate(events)) },
+        ]
+      end
+    end
+
+    it "does not reduce a complete incoming history to one reviewed-range transition" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "BREW-x-CVE-1.json")
+        File.write(path, JSON.generate({
+          "id" => "BREW-x-CVE-1", "affected" => [{ "ranges" => [{ "type" => "ECOSYSTEM", "events" => [
+            { "introduced" => "0" }, { "fixed" => "1.0" }
+          ] }] }]
+        }))
+        events = [{ introduced: "1.5" }, { fixed: "2.0" }, { introduced: "3.0" }]
+        incoming = { id: "BREW-x-CVE-1", affected: [{ ranges: [{ type: "ECOSYSTEM", events: }] }] }
+
+        expect(described_class.merge_existing(path, incoming, close_open_ranges: true)).to be_nil
+      end
+    end
+
     it "repairs an unreviewed range with a nonzero initial introduction" do
       Dir.mktmpdir do |dir|
         path = File.join(dir, "BREW-x-CVE-1.json")
