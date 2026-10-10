@@ -50,6 +50,13 @@ Existing reviewed ranges are preserved rather than replaced with guessed introdu
 `--no-history` explicitly uses unverified zero/current-version boundaries for new ranges and cannot be combined with `--new-history`.
 It is an unchecked authoring mode, not a way to validate a skipped candidate.
 
+`--rejected-candidates=<file>` requires `--output` and reads an explicit local rejection list; it never fetches one.
+The file contains exact, case-sensitive record IDs, one per line, with `#` comments, surrounding whitespace and blank lines ignored.
+With history enabled, listed new comparable candidates are skipped before additional platform queries or history walks, and their count and IDs are reported.
+Alias preparation still sees all actionable hits, and a listed non-canonical alias does not reject the canonical ID.
+Existing records, including unreviewed aliases, are processed normally so downstream validation can still reject listed records on disk.
+This option does not change `--no-history` or `--reconcile-history`; an unreadable rejection file fails the command.
+
 ## Reconciling existing ranges
 
 `--reconcile-history --output advisories --overrides data/overrides.yml` explicitly revisits existing `source: matched`, bump-fixed records with terminal introduced/fixed intervals.

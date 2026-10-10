@@ -339,6 +339,7 @@ _brew_advisory_match() {
       --overrides
       --quiet
       --reconcile-history
+      --rejected-candidates
       --repology
       --verbose
       "

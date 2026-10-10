@@ -456,6 +456,7 @@ _brew_advisory_match() {
     '--overrides[Load reviewed formula and advisory matching overrides from file]' \
     '--quiet[Make some output more quiet]' \
     '(--new-history --no-history --json --index)--reconcile-history[Reconcile existing matched terminal ranges against complete history; requires `--overrides`]' \
+    '--rejected-candidates[Skip new comparable candidates whose record IDs are listed in file, before history]' \
     '--repology[Load the formula to distro-package index from file instead of the published `data/repology.json`]' \
     '--verbose[Make some output more verbose]' \
     - formula \

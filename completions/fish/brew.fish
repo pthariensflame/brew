@@ -346,6 +346,7 @@ __fish_brew_complete_arg 'advisory-match' -l output -d 'Write each record to dir
 __fish_brew_complete_arg 'advisory-match' -l overrides -d 'Load reviewed formula and advisory matching overrides from file'
 __fish_brew_complete_arg 'advisory-match' -l quiet -d 'Make some output more quiet'
 __fish_brew_complete_arg 'advisory-match' -l reconcile-history -d 'Reconcile existing matched terminal ranges against complete history; requires `--overrides`'
+__fish_brew_complete_arg 'advisory-match' -l rejected-candidates -d 'Skip new comparable candidates whose record IDs are listed in file, before history'
 __fish_brew_complete_arg 'advisory-match' -l repology -d 'Load the formula to distro-package index from file instead of the published `data/repology.json`'
 __fish_brew_complete_arg 'advisory-match' -l verbose -d 'Make some output more verbose'
 __fish_brew_complete_arg 'advisory-match' -a '(__fish_brew_suggest_formulae_all)'
