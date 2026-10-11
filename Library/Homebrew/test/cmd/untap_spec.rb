@@ -249,7 +249,7 @@ RSpec.describe Homebrew::Cmd::Untap do
 
   describe "#installed_casks_for", :cask do
     shared_examples "finds installed casks in tap", :no_api do
-      def load_cask(token:, with_cask_file: false, mock_install: false, deprecated: false)
+      def load_cask(token:, with_cask_file: false, mock_install: false, deprecated: false, tap: subject)
         cask_source = <<~RUBY
           cask '#{token}' do
             version "1.2.3"
@@ -269,10 +269,10 @@ RSpec.describe Homebrew::Cmd::Untap do
 
         return if deprecated
 
-        cask_loader = Cask::CaskLoader::FromContentLoader.new(cask_source, tap: subject)
+        cask_loader = Cask::CaskLoader::FromContentLoader.new(cask_source, tap:)
         cask = cask_loader.load(config: nil)
 
-        InstallHelper.install_with_caskfile(cask) if mock_install
+        InstallHelper.stub_cask_installation(cask) if mock_install
 
         cask
       end
@@ -293,6 +293,19 @@ RSpec.describe Homebrew::Cmd::Untap do
       end
 
       it "returns the expected casks" do
+        expect(described_class.new(%w[arg1]).installed_casks_for(tap: subject)).to eq([currently_installed_cask])
+      end
+
+      it "excludes casks installed from another tap" do
+        load_cask(token: "other_tap_install", with_cask_file: true, mock_install: true,
+                  tap: subject.core_cask_tap? ? Tap.fetch("homebrew", "bar") : CoreCaskTap.instance)
+
+        expect(described_class.new(%w[arg1]).installed_casks_for(tap: subject)).to eq([currently_installed_cask])
+      end
+
+      it "includes installed casks without a receipt" do
+        (currently_installed_cask.metadata_main_container_path/AbstractTab::FILENAME).unlink
+
         expect(described_class.new(%w[arg1]).installed_casks_for(tap: subject)).to eq([currently_installed_cask])
       end
     end

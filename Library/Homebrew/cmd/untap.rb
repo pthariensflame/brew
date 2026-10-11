@@ -136,7 +136,7 @@ module Homebrew
             next
           end
 
-          cask if cask.installed?
+          cask if cask.installed? && cask.tab.tap == tap
         end
       end
 
