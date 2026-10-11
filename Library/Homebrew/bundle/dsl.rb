@@ -113,7 +113,7 @@ module Homebrew
       private :validate_type!
 
       HOMEBREW_TAP_ARGS_REGEX = %r{^([\w-]+)/(homebrew-)?([\w-]+)$}
-      HOMEBREW_CORE_FORMULA_REGEX = %r{^homebrew/homebrew/([\w+-.@]+)$}i
+      HOMEBREW_CORE_FORMULA_REGEX = %r{^homebrew/(?:homebrew|core)/([\w+-.@]+)$}i
       HOMEBREW_TAP_FORMULA_REGEX = %r{^([\w-]+)/([\w-]+)/([\w+-.@]+)$}
 
       sig { params(name: String).returns(String) }
