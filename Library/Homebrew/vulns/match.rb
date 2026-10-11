@@ -231,6 +231,10 @@ module Homebrew
         @vuln_cache = T.let({}, T::Hash[String, T.nilable(Vulnerability)])
         @vuln_errors = T.let({}, T::Hash[String, OSV::Error])
         @history = T.let(History.new, History)
+        @reconciliation_observations = T.let(
+          {}.compare_by_identity,
+          T::Hash[Formula, T::Hash[[T::Array[String], T::Array[Evidence]], HistoricalObservation]],
+        )
       end
 
       sig { returns(T::Array[History::LoadFailure]) }
@@ -948,23 +952,32 @@ module Homebrew
       # transition, including below-introduced versions and removed resources.
       # An unresolved or protected result never supplies replacement boundaries.
       sig {
-        params(formula: Formula, hit: Hit, require_resource_presence: T::Boolean).returns(ReconciledHistory)
+        params(formula: Formula, hit: Hit, require_resource_presence: T::Boolean,
+               reuse_platforms: T::Boolean).returns(ReconciledHistory)
       }
-      def reconcile_history(formula, hit, require_resource_presence: false)
+      def reconcile_history(formula, hit, require_resource_presence: false, reuse_platforms: false)
         if preserve_homebrew_ranges?(formula.name, hit.identifiers)
           return ReconciledHistory.new(state: :preserved, reasons: [])
         end
 
         unseen = require_resource_presence ? hit.evidence.select(&:resource).dup : []
+        # Matching metadata alone does not identify an observation: constraints
+        # and the alias family (including patch annotations) must also agree.
+        observation_key = [hit.identifiers, hit.evidence]
         observe = lambda do |build|
           unseen.reject! do |ev|
             present, version = subject_version_at(build, ev)
             present && !version.nil?
           end
-          reconciliation_observation(build, hit)
+          if reuse_platforms && @history.platform_independent?(build)
+            cached = @reconciliation_observations[build] ||= {}
+            cached[observation_key] ||= reconciliation_observation(build, hit)
+          else
+            reconciliation_observation(build, hit)
+          end
         end
         observations = [observe.call(formula)]
-        result = @history.walk(formula, complete: true) do |old|
+        result = @history.walk(formula, complete: true, reuse_platforms:) do |old|
           observations << observe.call(old)
           nil
         end

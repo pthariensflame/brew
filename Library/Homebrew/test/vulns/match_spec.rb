@@ -1219,7 +1219,7 @@ RSpec.describe Homebrew::Vulns::Match do
       older = [prerelease_formula("2026.2.22-2"), prerelease_formula("2026.2.21-2")]
       history = instance_double(Homebrew::Vulns::History)
       allow(Homebrew::Vulns::History).to receive(:new).and_return(history)
-      allow(history).to receive(:walk).with(current, complete: true) do |&block|
+      allow(history).to receive(:walk).with(current, complete: true, reuse_platforms: false) do |&block|
         older.each { |old| block.call(old) }
         nil
       end
@@ -2498,6 +2498,58 @@ RSpec.describe Homebrew::Vulns::Match do
     it "rejects empty evidence" do
       expect { described_class.new(vulnerability: vuln("id" => "CVE-1"), evidence: []) }
         .to raise_error(ArgumentError)
+    end
+  end
+
+  context "with shared historical observations" do
+    let(:current) do
+      formula("requests") do
+        T.bind(self, T.class_of(Formula))
+        url "https://files.pythonhosted.org/packages/aa/bb/cc/requests-3.0.tar.gz"
+      end
+    end
+    let(:old) do
+      formula("requests") do
+        T.bind(self, T.class_of(Formula))
+        url "https://files.pythonhosted.org/packages/aa/bb/cc/requests-1.0.tar.gz"
+      end
+    end
+    let(:history) { instance_double(Homebrew::Vulns::History) }
+
+    before do
+      allow(Homebrew::Vulns::History).to receive(:new).and_return(history)
+      allow(history).to receive(:walk).and_yield(old)
+      allow(history).to receive(:platform_independent?).with(current).and_return(false)
+      allow(history).to receive(:platform_independent?).with(old).and_return(true)
+    end
+
+    def cached_hit(fixed: "2.0", aliases: [])
+      vulnerability = vuln({
+        "id" => "CVE-2024-1234", "aliases" => aliases, "affected" => [{
+          "package" => { "ecosystem" => "PyPI", "name" => "requests" },
+          "ranges"  => [{ "type" => "ECOSYSTEM", "events" => [{ "introduced" => "0" }, { "fixed" => fixed }] }],
+        }]
+      })
+      make_hit(vulnerability, ev(:registry, ecosystem: "PyPI", name: "requests", subject_version: "3.0"))
+    end
+
+    it "does not reuse an observation for different upstream constraints under the same ID" do
+      first = matcher.reconcile_history(current, cached_hit, reuse_platforms: true)
+      changed = matcher.reconcile_history(current, cached_hit(fixed: "0.5"), reuse_platforms: true)
+
+      expect([first.state, changed.state]).to eq [:range, :never_affected]
+    end
+
+    it "rechecks patch annotations when the upstream alias family changes" do
+      allow(old).to receive(:serialized_patches)
+        .and_return([{ "resolves" => [{ "type" => "security", "id" => "CVE-2024-5678" }] }])
+      original = cached_hit
+      expanded = make_hit(cached_hit(aliases: ["CVE-2024-5678"]).vulnerability, *original.evidence)
+      first = matcher.reconcile_history(current, original, reuse_platforms: true)
+      changed = matcher.reconcile_history(current, expanded, reuse_platforms: true)
+
+      expect([first.state, changed.state, changed.reasons])
+        .to eq [:range, :unresolved, [:advisory_patch_requires_review]]
     end
   end
 end
