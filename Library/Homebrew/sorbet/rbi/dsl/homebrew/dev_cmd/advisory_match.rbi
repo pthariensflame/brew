@@ -39,5 +39,8 @@ class Homebrew::DevCmd::AdvisoryMatch::Args < Homebrew::CLI::Args
   def reconcile_history?; end
 
   sig { returns(T.nilable(String)) }
+  def rejected_candidates; end
+
+  sig { returns(T.nilable(String)) }
   def repology; end
 end

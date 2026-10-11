@@ -2554,6 +2554,193 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
     expect(index.dig("requests", "primary_package", "ecosystem")).to eq "PyPI"
   end
 
+  context "with --rejected-candidates" do
+    let(:dir) { Dir.mktmpdir }
+    let(:record_id) { "BREW-requests-CVE-2024-1234" }
+    let(:record_path) { File.join(dir, "#{record_id}.json") }
+    let(:rejected_path) { File.join(dir, "rejected-candidates.txt") }
+    let(:rejected_contents) { "#{record_id}\n" }
+    let(:history_option) { "--new-history" }
+    let(:command) do
+      cmd_for("requests", "--output", dir, history_option, "--rejected-candidates", rejected_path)
+    end
+    let(:matcher) { Homebrew::Vulns::Match.new }
+    let(:stored) do
+      hit = matcher.advisories_for(requests).fetch(0)
+      JSON.parse(JSON.generate(matcher.to_brew_record(requests, hit, now: Time.utc(2020))))
+    end
+
+    before do
+      stub_osv_hit("CVE-2024-1234", fixed: "2.28.1", aliases: ["GHSA-example"])
+      allow(matcher).to receive(:reconcile_history).and_return(history_result)
+      allow(Homebrew::Vulns::Match).to receive(:new).and_return(matcher)
+      File.write(rejected_path, rejected_contents)
+    end
+
+    after do
+      FileUtils.remove_entry(dir)
+    end
+
+    it "reports a rejected new candidate without extra platform queries or history" do
+      expect(matcher).not_to receive(:advisories_for)
+      expect(matcher).not_to receive(:reconcile_history)
+
+      output = capture_stdout { command.run }
+      expect([File.exist?(record_path), output]).to match [
+        false, a_string_matching(/1 rejected candidates skipped before history\n    #{record_id}\n/)
+      ]
+    end
+
+    it "processes an existing rejected record exactly as without the flag" do
+      stored["summary"] = "old summary"
+      original = JSON.generate(stored)
+      allow(Time).to receive(:now).and_return(Time.utc(2026))
+      File.write(record_path, original)
+      baseline_output = capture_stdout { cmd_for("requests", "--output", dir, "--new-history").run }
+      baseline = File.read(record_path)
+      File.write(record_path, original)
+
+      output = capture_stdout { command.run }
+      expect([File.read(record_path), output, JSON.parse(File.read(record_path))["summary"]])
+        .to eq [baseline, baseline_output, "s"]
+    end
+
+    it "does not skip an existing record with no reviewed range" do
+      stored.fetch("affected").fetch(0)["ranges"] = []
+      File.write(record_path, JSON.generate(stored))
+      expect(matcher).to receive(:reconcile_history).exactly(4).times.and_return(history_result)
+
+      output = capture_stdout { command.run }
+      expect([JSON.parse(File.read(record_path)).dig("affected", 0, "ranges", 0, "events"), output])
+        .to match [[{ "introduced" => "2.27.0" }, { "fixed" => "2.28.1" }], a_string_matching(/4 history walks/)]
+    end
+
+    it "does not skip an existing unreviewed alias of a rejected canonical ID" do
+      stored["id"] = "BREW-requests-GHSA-example"
+      stored.fetch("affected").fetch(0)["ranges"] = []
+      alias_path = File.join(dir, "#{stored.fetch("id")}.json")
+      File.write(alias_path, JSON.generate(stored))
+      expect(matcher).to receive(:reconcile_history).exactly(4).times.and_return(history_result)
+
+      command.run
+      expect(JSON.parse(File.read(alias_path)).dig("affected", 0, "ranges", 0, "events"))
+        .to eq [{ "introduced" => "2.27.0" }, { "fixed" => "2.28.1" }]
+    end
+
+    it "does not treat a listed non-canonical alias as a rejected record ID" do
+      File.write(rejected_path, "BREW-requests-GHSA-example\n")
+      expect(matcher).to receive(:reconcile_history).exactly(4).times.and_return(history_result)
+
+      command.run
+      expect(JSON.parse(File.read(record_path)).fetch("id")).to eq record_id
+    end
+
+    it "strips comments and whitespace and ignores blank lines and duplicate IDs" do
+      File.write(rejected_path,
+                 " # comment\n\n\t#{record_id} \t # trailing comment\r\n #{record_id} # duplicate\n \t\n")
+      expect { command.run }
+        .to output(/1 rejected candidates skipped before history\n    #{record_id}\n\z/).to_stdout
+    end
+
+    it "matches record IDs case-sensitively and without prefix matching" do
+      File.write(rejected_path, "#{record_id.downcase}\n#{record_id}-extra\n")
+      expect(matcher).to receive(:reconcile_history).exactly(4).times.and_return(history_result)
+
+      command.run
+      expect(File.exist?(record_path)).to be true
+    end
+
+    it "keeps the part-1 output and four-platform walk when the flag is absent" do
+      expect(matcher).to receive(:reconcile_history).exactly(4).times.and_return(history_result)
+
+      output = capture_stdout { cmd_for("requests", "--output", dir, "--new-history").run }
+      expect([JSON.parse(File.read(record_path)).dig("affected", 0, "ranges", 0, "events"), output])
+        .to match [[{ "introduced" => "2.27.0" }, { "fixed" => "2.28.1" }], a_string_matching(/4 history walks/)]
+      expect(output).not_to include("rejected candidates")
+    end
+
+    it "keeps full history for an allowed candidate when the rejected hit comes first" do
+      stub_osv_hit("CVE-2024-5678", fixed: "2.28.1")
+      ids = %w[CVE-2024-1234 CVE-2024-5678]
+      allow(Homebrew::Vulns::OSV).to receive(:query_batch).and_return([ids.map { |id| { "id" => id } }, []])
+      walked = []
+      allow(matcher).to receive(:reconcile_history) do |_, hit|
+        walked << hit.canonical_id
+        history_result
+      end
+      expect(matcher).to receive(:advisories_for).exactly(3).times.and_call_original
+
+      command.run
+      expect([Dir.glob(File.join(dir, "BREW-*.json")).map { |path| File.basename(path) }, walked])
+        .to eq [["BREW-requests-CVE-2024-5678.json"], Array.new(4, "CVE-2024-5678")]
+    end
+
+    it "keeps full history for an allowed candidate when the rejected hit comes last" do
+      stub_osv_hit("CVE-2024-5678", fixed: "2.28.1")
+      ids = %w[CVE-2024-5678 CVE-2024-1234]
+      allow(Homebrew::Vulns::OSV).to receive(:query_batch).and_return([ids.map { |id| { "id" => id } }, []])
+      walked = []
+      allow(matcher).to receive(:reconcile_history) do |_, hit|
+        walked << hit.canonical_id
+        history_result
+      end
+      expect(matcher).to receive(:advisories_for).exactly(3).times.and_call_original
+
+      command.run
+      expect([Dir.glob(File.join(dir, "BREW-*.json")).map { |path| File.basename(path) }, walked])
+        .to eq [["BREW-requests-CVE-2024-5678.json"], Array.new(4, "CVE-2024-5678")]
+    end
+
+    it "still reports malformed existing records during alias preparation" do
+      File.write(record_path, "{")
+      expect { command.run }.to output(/malformed alias/).to_stderr
+      expect([Homebrew.failed?, File.read(record_path)]).to eq [true, "{"]
+    end
+
+    it "fails when the rejection file is missing" do
+      File.unlink(rejected_path)
+      expect { command.run }.to raise_error(Errno::ENOENT)
+    end
+
+    it "fails when the rejection file is unreadable" do
+      allow(File).to receive(:readlines).with(rejected_path, chomp: true).and_raise(Errno::EACCES)
+      expect { command.run }.to raise_error(Errno::EACCES)
+    end
+
+    it "requires an output directory" do
+      expect { cmd_for("requests", "--rejected-candidates", rejected_path) }
+        .to raise_error(UsageError, /--rejected-candidates.*--output/)
+    end
+
+    context "with --no-history" do
+      let(:history_option) { "--no-history" }
+
+      it "leaves unchecked authoring unchanged" do
+        expect(matcher).not_to receive(:reconcile_history)
+        command.run
+        expect(File.exist?(record_path)).to be true
+      end
+    end
+
+    context "with --reconcile-history" do
+      let(:command) do
+        overrides_path = File.join(dir, "overrides.yml")
+        File.write(overrides_path, "{}")
+        cmd_for("requests", "--output", dir, "--reconcile-history", "--overrides", overrides_path,
+                "--rejected-candidates", rejected_path)
+      end
+
+      it "still reconciles an existing rejected record" do
+        File.write(record_path, JSON.generate(stored))
+        expect(matcher).to receive(:reconcile_history).exactly(4).times.and_return(history_result)
+
+        command.run
+        expect(JSON.parse(File.read(record_path)).dig("affected", 0, "ranges", 0, "events"))
+          .to eq [{ "introduced" => "2.27.0" }, { "fixed" => "2.28.1" }]
+      end
+    end
+  end
+
   def capture_stdout
     out = StringIO.new
     old = $stdout

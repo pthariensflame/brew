@@ -37,6 +37,9 @@ module Homebrew
                             "<file> instead of the published `data/repology.json`."
         flag   "--overrides=",
                description: "Load reviewed formula and advisory matching overrides from <file>."
+        flag   "--rejected-candidates=",
+               depends_on:  "--output=",
+               description: "Skip new comparable candidates whose record IDs are listed in <file>, before history."
         switch "--no-history",
                description: "Skip `FormulaVersions` walks for new ranges; use " \
                             "zero/current `pkg_version` as unverified boundaries."
@@ -82,6 +85,15 @@ module Homebrew
         formula_names = if (list = args.formula_list)
           File.readlines(list, chomp: true).reject(&:empty?).uniq
         end
+        rejected_candidates = if (path = args.rejected_candidates)
+          File.readlines(path, chomp: true).filter_map do |line|
+            id = line.sub(/#.*/, "").strip
+            id unless id.empty?
+          end.to_set
+        else
+          Set.new
+        end
+        prefiltered = T.let([], T::Array[String])
         Formulary.enable_factory_cache!
         Homebrew::API.with_no_api_env do
           latest_macos = MacOSVersion.new((HOMEBREW_MACOS_NEWEST_UNSUPPORTED.to_i - 1).to_s).to_sym
@@ -125,6 +137,23 @@ module Homebrew
                   alias_errors.each { |error| onoe error }
                   Homebrew.failed = true
                   next
+                end
+
+                # Alias preparation must still see every actionable hit. Only
+                # absent records can be rejected before their initial history;
+                # existing records remain subject to the database's checks.
+                if rejected_candidates.any? && !args.no_history? && emitter.is_a?(DirEmitter)
+                  actionable.reject! do |hit, status|
+                    next false unless status
+
+                    id = matcher.record_id(formula, hit)
+                    next false unless rejected_candidates.include?(id)
+                    next false if emitter.alias_protected?(id) || emitter.reviewed_range_state(id)
+                    next false if emitter.alias_target_paths(id).any? { |target| File.exist?(target) }
+
+                    prefiltered << id
+                    true
+                  end
                 end
 
                 new_histories = T.let({}, T::Hash[String, Homebrew::Vulns::Match::ReconciledHistory])
@@ -263,6 +292,10 @@ module Homebrew
               Homebrew.failed = true
             end
             emitter.finish
+            if prefiltered.any?
+              puts "  #{prefiltered.length} rejected candidates skipped before history"
+              prefiltered.sort.each { |id| puts "    #{id}" }
+            end
             report_history_load_failures(matcher) if args.reconcile_history?
           end
         end
