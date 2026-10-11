@@ -811,21 +811,44 @@ RSpec.describe Cask::Audit, :cask do
         allow(audit).to receive_messages(download: download_double, signing?: true)
       end
 
-      context "when cask is not using a signed artifact" do
+      test_each(["font 'Audit.ttf'", "qlplugin 'Audit.qlgenerator'"]) do |stanza|
+        context "when cask only has `#{stanza}`" do
+          let(:cask) do
+            tmp_cask "signing-cask-test", <<~RUBY
+              cask 'signing-cask-test' do
+                version '1.0'
+                url "https://brew.sh/index.html"
+                #{stanza}
+              end
+            RUBY
+          end
+
+          it "does not fail" do
+            expect(download_double).not_to receive(:fetch)
+            expect(UnpackStrategy).not_to receive(:detect)
+            expect(run).not_to error_with(/Audit\.app/)
+          end
+        end
+      end
+
+      context "when cask only has a suite" do
+        let(:online) { true }
         let(:cask) do
           tmp_cask "signing-cask-test", <<~RUBY
             cask 'signing-cask-test' do
               version '1.0'
-              url "https://brew.sh/index.html"
-              artifact "example.pdf", target: "/Library/Application Support/example"
+              url "https://brew.sh/"
+              suite 'Audit Suite'
             end
           RUBY
         end
 
-        it "does not fail" do
-          expect(download_double).not_to receive(:fetch)
-          expect(UnpackStrategy).not_to receive(:detect)
-          expect(run).not_to error_with(/Audit\.app/)
+        it "extracts it" do
+          allow(Cask::Quarantine).to receive(:available?).and_return(true)
+          allow(ObjectSpace).to receive(:define_finalizer)
+          allow(download_double).to receive(:fetch).and_return(Pathname.new("/tmp/test.zip"))
+          expect(UnpackStrategy).to receive(:detect).and_return(nil)
+          run
         end
       end
 
@@ -918,6 +941,101 @@ RSpec.describe Cask::Audit, :cask do
         it "skips the signing audit" do
           expect(Cask::Quarantine).not_to receive(:available?)
           run
+        end
+      end
+
+      context "when cask has other signable artifacts" do
+        let(:tmpdir) { mktmpdir }
+        let(:passed_result) { instance_double(SystemCommand::Result, success?: true) }
+        let(:failed_result) do
+          instance_double(SystemCommand::Result, success?: false, merged_output: "rejected")
+        end
+        let(:cask_artifact) { "suite 'Audit Suite'" }
+        let(:cask) do
+          tmp_cask "signing-cask-test", <<~RUBY
+            cask 'signing-cask-test' do
+              version '1.0'
+              url "https://brew.sh/"
+              #{cask_artifact}
+            end
+          RUBY
+        end
+        let(:suite) { tmpdir/"Audit Suite" }
+
+        def stub_check(command, *args, path)
+          allow(audit).to receive(:system_command)
+            .with(command, args: [*args, path], print_stderr: false).and_return(failed_result)
+        end
+
+        before do
+          allow(cask).to receive(:tap).and_return(tap)
+          allow(Cask::Quarantine).to receive_messages(available?: true, detect: true)
+          allow(audit).to receive(:which).with("gktool").and_return(Pathname("/usr/bin/gktool"))
+          allow(audit).to receive(:system_command).and_return(passed_result)
+          allow(audit).to receive(:extract_artifacts).and_yield(cask.artifacts.to_a, tmpdir)
+        end
+
+        test_each_hash({
+          audio_unit_plugin: "Audit.component",
+          colorpicker:       "Audit.colorPicker",
+          input_method:      "Audit.app",
+          internet_plugin:   "Audit.plugin",
+          mdimporter:        "Audit.mdimporter",
+          prefpane:          "Audit.prefPane",
+          screen_saver:      "Audit.saver",
+          service:           "Audit.service",
+          vst3_plugin:       "Audit.vst3",
+          vst_plugin:        "Audit.vst",
+        }) do |stanza, bundle|
+          context "when the #{stanza} fails Gatekeeper" do
+            let(:cask_artifact) { "#{stanza} '#{bundle}'" }
+
+            it "errors" do
+              stub_check("gktool", "scan", tmpdir/bundle)
+              expect(run).to error_with(/Signature verification failed/)
+            end
+          end
+        end
+
+        context "when a generic artifact bundle fails Gatekeeper" do
+          let(:cask_artifact) { "artifact 'Audit.plugin', target: '~/Library/Audit/Audit.plugin'" }
+
+          it "errors" do
+            (tmpdir/"Audit.plugin").mkpath
+            stub_check("gktool", "scan", tmpdir/"Audit.plugin")
+            expect(run).to error_with(/Signature verification failed/)
+          end
+        end
+
+        it "errors when an app in the suite fails Gatekeeper" do
+          (suite/"Good.app").mkpath
+          (suite/"Bad.app").mkpath
+          stub_check("gktool", "scan", suite/"Bad.app")
+          expect(run).to error_with(%r{Signature verification failed for Audit Suite/Bad\.app:})
+        end
+
+        it "does not check a suite without code" do
+          (suite/"lib").mkpath
+          FileUtils.touch suite/"lib/audit.jar"
+          expect(audit).not_to receive(:system_command)
+          run
+        end
+
+        it "errors when a loose executable in the suite is not notarized", :needs_macos do
+          suite.mkpath
+          FileUtils.install TEST_FIXTURE_DIR/"mach/a.out", suite/"audit", mode: 0755
+          stub_check("codesign", "--verify", "-R=notarized", "--check-notarization", suite/"audit")
+          expect(run).to error_with(%r{Signature verification failed for Audit Suite/audit:})
+        end
+
+        context "when an installer script is not notarized", :needs_macos do
+          let(:cask_artifact) { "installer script: { executable: 'audit-installer' }" }
+
+          it "errors" do
+            FileUtils.install TEST_FIXTURE_DIR/"mach/a.out", tmpdir/"audit-installer", mode: 0755
+            stub_check("codesign", "--verify", "-R=notarized", "--check-notarization", tmpdir/"audit-installer")
+            expect(run).to error_with(/Signature verification failed/)
+          end
         end
       end
     end
