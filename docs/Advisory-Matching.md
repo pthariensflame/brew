@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-09-16"
+last_review_date: "2026-10-09"
 ---
 
 # Advisory Matching
@@ -10,12 +10,17 @@ Candidates still need [human review](https://github.com/Homebrew/advisory-databa
 
 ## Range accuracy and coverage
 
-With history enabled, a candidate with a comparable current state and no reviewed range must have an affected interval that can be established from formula history.
+With history enabled, a candidate with a comparable current state and no reviewed range must have its complete affected intervals established from formula history on the latest supported macOS and Linux for both ARM and Intel.
 This applies even when the current formula is known to be affected: knowing today's state does not establish when the affected range began.
 An `introduced: "0"` boundary asserts that every earlier version is affected; it is not a marker for an unknown introduction.
 
 Automatic matching deliberately favours range accuracy over coverage.
-Unreadable or uncomparable history and disjoint affected intervals can prevent a new record from being emitted.
+Unreadable or uncomparable history can prevent a new record from being emitted.
+Disjoint affected runs produce separate introduced/fixed pairs, including an open final interval when the package is still affected.
+Known intervals are unioned across platforms; a history or provenance failure on any platform holds the whole candidate.
+Additional platform views are queried once per formula for its new candidates, and a held candidate stops visiting further platforms.
+For a resource-only hit absent from another platform's current formula, the original upstream constraints are checked against that platform's complete history.
+Absence today alone does not establish historical absence; unreadable history, unknown resource identities and missing query results for present resources still require review.
 The command warns and counts these as history-unavailable skips instead of inventing a boundary.
 This includes a historical subject whose prerelease suffix changes its `SEMVER` range state compared with its release version.
 A skip does not mean the formula is unaffected, so an ingest run can omit a currently affected formula and is not evidence of complete vulnerability coverage.
@@ -24,8 +29,10 @@ Reviewers must establish the ranges and matching provenance together from upstre
 For a new record, a `pkg_version` shared by affected and unaffected builds is conservatively included in the affected interval, because the advisory cannot distinguish those builds by version.
 This can happen when a resource changes without a formula revision bump.
 For the same reason, a fix that shares its `pkg_version` with affected builds is recorded at the next version with only fixed builds, and a range stays unchanged while the current version also has an affected build.
-A distinct unaffected version inside the interval still requires review.
-Existing-range reconciliation and reintroduction checks retain their stricter rules for mixed builds, so reconciliation reports a record whose `introduced` version has mixed builds as an unrepresentable interval and leaves it unchanged.
+A distinct unaffected label closes the preceding interval; a later affected label opens another.
+Complete-history reconciliation applies the same any-affected-build rule.
+Unknown builds, conflicting upstream constraints and rollbacks with no representable fix still require review.
+Existing daily boundary-transition checks retain their conservative guards.
 
 Current-version prerelease ambiguity produces an uncomparable review lead with no `range_state`, reduced confidence and `database_specific.review_reason: "prerelease_boundary"`.
 Ingest drops these leads and lists their IDs by reason in its run summary.
@@ -45,11 +52,15 @@ It is an unchecked authoring mode, not a way to validate a skipped candidate.
 
 ## Reconciling existing ranges
 
-`--reconcile-history --output advisories --overrides data/overrides.yml` explicitly revisits existing `source: matched`, bump-fixed records with one terminal interval.
-It requires complete formula history and matching provenance, with the same result on the latest supported macOS and Linux for both ARM and Intel.
+`--reconcile-history --output advisories --overrides data/overrides.yml` explicitly revisits existing `source: matched`, bump-fixed records with terminal introduced/fixed intervals.
+It requires complete formula history and matching provenance, on the latest supported macOS and Linux for both ARM and Intel.
+Known affected intervals are unioned across those platforms; an unaffected platform cannot cancel another platform’s affected builds.
 These simulations check declared formula and resource versions; they do not rebuild historical bottles or verify installation steps.
-It can narrow an affected interval or delete a record proven never affected; it preserves other fields and updates `modified` only for a range change.
-Generated records, patch fixes and open or multiple intervals are left unchanged.
+It can narrow or split affected intervals or delete a record proven never affected on every platform; it preserves other fields and updates `modified` only for a range change.
+Generated records, patch fixes, open intervals and unsupported range shapes are left unchanged.
+Reviewed closed multi-interval records can be narrowed, but a proposed interval must remain entirely inside the reviewed affected set.
+Reconciliation cannot fill reviewed safe gaps, expand coverage or reopen a terminal range.
+Initial repairs preserve complete split histories in unreviewed ranges without replacing reviewed intervals.
 For records missed by current matching, complete registry-resource evidence can supply versionless upstream queries even after a resource has been removed.
 The fresh results must reproduce the stored upstream family and range basis, and every resource identity must occur in formula history on every platform.
 Stored subject versions only reproduce the range basis; historical decisions use versions from the formula sources.
@@ -61,7 +72,7 @@ The command reports skip reasons and the number of matched records it did not re
 
 Before running this mode, protect hand-reviewed Homebrew boundaries with `preserve_homebrew_ranges: true` under the formula and advisory in `overrides.yml`.
 The pin applies across advisory aliases and is separate from `upstream_fixed_in`, which describes the upstream fix.
-Unavailable history or upstream records, changed subjects, conflicting platform results and advisory-specific patches require review.
+Unavailable history or upstream records, changed subjects, unresolved platform results and advisory-specific patches require review.
 A failed upstream lookup holds every record for that formula with `upstream_unavailable`; a failed batch query holds its entire formula batch.
 A confirmed HTTP 404 while following an upstream link is cached as a missing target; a record with no resolved targets keeps its original evidence.
 A 404 for a supplemental CPANSA CVE lookup uses the CPANSA evidence for that CVE, including on subsequent platform passes.
