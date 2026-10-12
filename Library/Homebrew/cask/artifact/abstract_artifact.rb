@@ -180,7 +180,7 @@ module Cask
         end
 
         # extract executable
-        executable = arguments.key?(:executable) ? arguments.delete(:executable) : nil
+        executable = arguments.delete(:executable) if arguments.key?(:executable)
 
         arguments = default_arguments.merge arguments
         arguments.merge! override_arguments

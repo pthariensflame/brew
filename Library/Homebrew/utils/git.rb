@@ -31,7 +31,7 @@ module Utils
       @version ||= T.let(begin
         stdout, _, status = system_command(git, args: ["--version"], env: no_global_config_env,
                                                 verbose: false, print_stderr: false).to_a
-        version_str = status.success? ? stdout.chomp[/git version (\d+(?:\.\d+)*)/, 1] : nil
+        version_str = stdout.chomp[/git version (\d+(?:\.\d+)*)/, 1] if status.success?
         version_str.nil? ? Version::NULL : Version.new(version_str)
       end, T.nilable(Version))
     end

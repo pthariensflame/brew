@@ -104,7 +104,7 @@ module Homebrew
               false
             end
           end
-          shared = independent ? @shared_formulae[key] : nil
+          shared = @shared_formulae[key] if independent
           verdict = if shared
             [yield(shared)]
           else
