@@ -501,6 +501,61 @@ RSpec.describe PyPI do
       RUBY
     end
 
+    it "keeps test resources with livecheck blocks" do
+      path = mktmpdir/"foo.rb"
+      test_resource = <<~RUBY
+        resource "homebrew-test-resource", :test do
+          url "https://example.com/v1.0.tar.gz"
+          sha256 "#{"c" * 64}"
+        end
+      RUBY
+      contents = <<~RUBY
+        class Foo < Formula
+          url "https://files.pythonhosted.org/packages/foo-1.0.tar.gz"
+          sha256 "#{"a" * 64}"
+
+          resource "bar" do
+            url "https://files.pythonhosted.org/packages/bar-0.9.tar.gz"
+            sha256 "#{"b" * 64}"
+          end
+
+          #{test_resource}
+          def install
+            bin.install "foo"
+          end
+        end
+      RUBY
+      path.write(contents)
+      package = PyPI::Package.new("bar==1.0")
+
+      allow(Formula).to receive(:[]).with("python").and_return(instance_double(Formula, ensure_installed!: true))
+      allow(described_class).to receive(:pip_report)
+        .and_return([PyPI::Package.new("foo==1.0"), package])
+      allow(package).to receive(:pypi_info).and_return(
+        ["bar", "https://files.pythonhosted.org/packages/bar-1.0.tar.gz", "d" * 64, "1.0", nil],
+      )
+
+      described_class.update_python_resources!(Formulary.from_contents("foo", path, contents),
+                                               package_name: "foo", quiet: true)
+
+      expect(path.read).to eq <<~RUBY
+        class Foo < Formula
+          url "https://files.pythonhosted.org/packages/foo-1.0.tar.gz"
+          sha256 "#{"a" * 64}"
+
+          resource "bar" do
+            url "https://files.pythonhosted.org/packages/bar-1.0.tar.gz"
+            sha256 "#{"d" * 64}"
+          end
+
+          #{test_resource}
+          def install
+            bin.install "foo"
+          end
+        end
+      RUBY
+    end
+
     it "exempts the main package from the cooldown when requested" do
       path = mktmpdir/"foo.rb"
       contents = <<~RUBY
