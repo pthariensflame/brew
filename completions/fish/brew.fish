@@ -1593,7 +1593,6 @@ __fish_brew_complete_arg 'pr-publish' -l autosquash -d 'If supported on the targ
 __fish_brew_complete_arg 'pr-publish' -l branch -d 'Branch to use the workflow from (default: `main`)'
 __fish_brew_complete_arg 'pr-publish' -l debug -d 'Display any debugging information'
 __fish_brew_complete_arg 'pr-publish' -l help -d 'Show this message'
-__fish_brew_complete_arg 'pr-publish' -l large-runner -d 'Run the upload job on a large runner'
 __fish_brew_complete_arg 'pr-publish' -l message -d 'Message to include when autosquashing revision bumps, deletions and rebuilds'
 __fish_brew_complete_arg 'pr-publish' -l quiet -d 'Make some output more quiet'
 __fish_brew_complete_arg 'pr-publish' -l tap -d 'Target tap repository (default: `homebrew/core`)'

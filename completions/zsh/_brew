@@ -2057,7 +2057,6 @@ _brew_pr_publish() {
     '--branch[Branch to use the workflow from (default: `main`)]' \
     '--debug[Display any debugging information]' \
     '--help[Show this message]' \
-    '--large-runner[Run the upload job on a large runner]' \
     '--message[Message to include when autosquashing revision bumps, deletions and rebuilds]' \
     '--quiet[Make some output more quiet]' \
     '--tap[Target tap repository (default: `homebrew/core`)]' \
