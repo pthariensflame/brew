@@ -353,6 +353,15 @@ module PyPI
       resource.name
     end.to_set
 
+    test_resources = formula.resources.filter_map do |resource|
+      next unless resource.test?
+      next if resource.livecheck_defined?
+
+      resource.name
+    end.to_set
+
+    non_pypi_resource_names -= test_resources
+
     existing_resources_by_name = formula.resources.to_h { |resource| [resource.name, resource] }
     formula_contents = formula.path.read
     existing_resource_blocks = resource_blocks_from_formula(formula_contents)
@@ -439,6 +448,13 @@ module PyPI
         # Leave a placeholder for formula author to investigate
         package_errors += "  # RESOURCE-ERROR: Unable to resolve \"#{package}\" (#{package_error})\n"
       end
+    end
+
+    test_resources.sort.each do |name|
+      new_resource_blocks += <<-EOS
+  #{existing_resource_blocks[name].dup}
+
+      EOS
     end
 
     package_errors += "\n" if package_errors.present?
