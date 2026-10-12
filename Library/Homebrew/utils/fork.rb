@@ -99,6 +99,9 @@ module Utils
 
     error_pipe&.puts coder.dump(error)
     error_pipe&.close
+  rescue Errno::EPIPE
+    # The parent has already failed and closed its end of the pipe.
+    nil
   end
 
   sig { params(child_error: T::Hash[String, T.untyped]).returns(Exception) }

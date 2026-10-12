@@ -1050,7 +1050,7 @@ module Homebrew
           paths = step_paths(step, "paths").flat_map { |path| expand_path_glob(path) }
           if step.key?("symlink_target_contains")
             paths.select! do |path|
-              path.symlink? && path.readlink.to_s.include?(step_string(step, "symlink_target_contains"))
+              path.symlink? && read_symlink(path, step).to_s.include?(step_string(step, "symlink_target_contains"))
             end
           end
           if step.key?("content_contains")
@@ -1307,6 +1307,15 @@ module Homebrew
         end
       end
 
+      sig { params(path: Pathname, step: Step).returns(Pathname) }
+      def read_symlink(path, step)
+        path.readlink
+      rescue Errno::EACCES
+        raise if step["sudo"] != true && step["sudo"] != "if_needed"
+
+        Pathname(@command.run!("/usr/bin/readlink", args: ["-n", path], sudo: true).stdout)
+      end
+
       sig { params(step: Step).void }
       def run_set_permissions(step)
         paths = existing_step_paths(step)
@@ -1352,7 +1361,7 @@ module Homebrew
 
         target = resolve_path(step_path(step, "target"))
         return unless target.symlink?
-        return if target.readlink != Pathname(link_source(step_path(step, "source")))
+        return if read_symlink(target, step) != Pathname(link_source(step_path(step, "source")))
 
         if step["sudo"] == true || (step["sudo"] == "if_needed" && !target.dirname.writable?)
           require "cask/utils"

@@ -1691,6 +1691,101 @@ RSpec.describe Homebrew::InstallSteps do
     end
   end
 
+  context "when reading a symlink requires elevation" do
+    let(:target) { root/"stage/linked-target" }
+    let(:command) { class_double(SystemCommand) }
+    let(:sudo) { :if_needed }
+    let(:steps) do
+      elevation = sudo
+      Homebrew::InstallSteps::DSL.build(default_target_base: :staged_path) do
+        symlink "target", "linked-target", source_base: :relative,
+                                          remove_on_uninstall: true, sudo: elevation
+      end
+    end
+
+    before do
+      target.dirname.mkpath
+      File.symlink "target", target
+      allow(File).to receive(:readlink).and_call_original
+      allow(File).to receive(:readlink).with(target.to_s).and_raise(Errno::EACCES)
+      allow(command).to receive(:run!).with("/usr/bin/readlink", args: anything,
+                                                                 sudo: true) do |executable, args:, **|
+        SystemCommand.run!(executable, args:)
+      end
+    end
+
+    it "removes a matching symlink after reading its target with sudo" do
+      Homebrew::InstallSteps::Runner.new(context:, command:).run(steps, phase: :uninstall)
+
+      expect(target).not_to be_a_symlink
+    end
+
+    it "preserves a symlink whose target does not match" do
+      target.unlink
+      File.symlink "different-target", target
+
+      Homebrew::InstallSteps::Runner.new(context:, command:).run(steps, phase: :uninstall)
+
+      expect(target).to be_a_symlink
+    end
+
+    it "preserves a symlink whose target differs by a trailing newline" do
+      target.unlink
+      File.symlink "target\n", target
+
+      Homebrew::InstallSteps::Runner.new(context:, command:).run(steps, phase: :uninstall)
+
+      expect(target).to be_a_symlink
+    end
+
+    it "preserves the symlink and propagates a failed elevated inspection" do
+      allow(command).to receive(:run!).with("/usr/bin/readlink", args: anything, sudo: true)
+                                      .and_raise(ErrorDuringExecution.new([], status: 1))
+
+      expect do
+        Homebrew::InstallSteps::Runner.new(context:, command:).run(steps, phase: :uninstall)
+      end.to raise_error(ErrorDuringExecution) { expect(target).to be_a_symlink }
+    end
+
+    it "checks the target before filtered removal" do
+      steps = Homebrew::InstallSteps::DSL.build(default_base: :staged_path) do
+        remove "linked-target", sudo: :if_needed, symlink_target_contains: "target"
+      end
+      Homebrew::InstallSteps::Runner.new(context:, command:).run(steps)
+
+      expect(target).not_to be_a_symlink
+    end
+
+    it "preserves a symlink whose target does not match the removal filter" do
+      steps = Homebrew::InstallSteps::DSL.build(default_base: :staged_path) do
+        remove "linked-target", sudo: :if_needed, symlink_target_contains: "other-target"
+      end
+      Homebrew::InstallSteps::Runner.new(context:, command:).run(steps)
+
+      expect(target).to be_a_symlink
+    end
+
+    context "when sudo is required by the step" do
+      let(:sudo) { true }
+
+      it "removes a matching symlink after reading its target with sudo" do
+        Homebrew::InstallSteps::Runner.new(context:, command:).run(steps, phase: :uninstall)
+
+        expect(target).not_to be_a_symlink
+      end
+    end
+
+    context "when sudo is not permitted by the step" do
+      let(:sudo) { false }
+
+      it "preserves the permission error" do
+        expect do
+          Homebrew::InstallSteps::Runner.new(context:, command:).run(steps, phase: :uninstall)
+        end.to raise_error(Errno::EACCES)
+      end
+    end
+  end
+
   specify "does not expose the surrounding formula or cask DSL" do
     expect do
       Homebrew::InstallSteps::DSL.build(default_base: :var) do
