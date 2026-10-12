@@ -466,7 +466,8 @@ RSpec.describe Homebrew::Vulns::History do
         }
       end
 
-      it "reloads the dependent old revision despite an independent current revision" do
+      it "reloads the dependent old revision without rereading its source" do
+        expect(Utils).not_to receive(:popen_read).with("git", "cat-file", "blob", anything)
         expect(Formulary).to receive(:from_contents).exactly(5).times.and_call_original
         expect(walk_platforms(reuse: true)).to eq [
           [nil, [["3.0", []], ["1.0", []]]], [nil, [["3.0", []], ["1.0", []]]],
