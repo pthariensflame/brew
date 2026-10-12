@@ -1773,6 +1773,11 @@ RSpec.describe Homebrew::Cmd::Info do
 
     it "returns a GitHub URL for a formula whose file lives inside its tap" do
       formula_path = tap.new_formula_path("testball")
+      formula_path.dirname.mkpath
+      formula_path.write ""
+      system "git", "-C", tap.path, "init", "--quiet"
+      system "git", "-C", tap.path, "remote", "add", "origin", tap.default_remote
+      system "git", "-C", tap.path, "add", formula_path
       formula_instance = formula("testball", path: formula_path, tap:) do
         T.bind(self, T.class_of(Formula))
         url "https://brew.sh/testball-0.1.tar.gz"
@@ -1781,6 +1786,84 @@ RSpec.describe Homebrew::Cmd::Info do
       expect(described_class.new([]).github_info(formula_instance))
         .to eq("https://github.com/Homebrew/homebrew-core/blob/HEAD/" \
                "#{formula_path.relative_path_from(tap.path)}")
+    end
+
+    it "returns a GitHub URL for an API formula without a local tap" do
+      formula_instance = formula("testball", path: tap.new_formula_path("testball"), tap:) do
+        T.bind(self, T.class_of(Formula))
+        url "https://brew.sh/testball-0.1.tar.gz"
+      end
+      allow(formula_instance).to receive(:loaded_from_api?).and_return(true)
+      allow(Utils).to receive(:popen_read).and_raise("Git should not be spawned for API formulae")
+      allow(SystemCommand).to receive(:quiet_system).and_raise("Git should not be spawned for API formulae")
+
+      expect(described_class.new([]).github_info(formula_instance))
+        .to eq("https://github.com/Homebrew/homebrew-core/blob/HEAD/" \
+               "#{formula_instance.path.relative_path_from(tap.path)}")
+    end
+
+    context "when a local formula is untracked" do
+      let(:formula_path) { tap.formula_dir/"t/testball.rb" }
+
+      before do
+        formula_path.dirname.mkpath
+        formula_path.write <<~RUBY
+          class Testball < Formula
+            url "https://brew.sh/testball-0.1.tar.gz"
+          end
+        RUBY
+        system "git", "-C", tap.path, "init", "--quiet"
+        system "git", "-C", tap.path, "remote", "add", "origin", tap.default_remote
+      end
+
+      it "returns the local path when the formula is not installed" do
+        expect(described_class.new([]).github_info(Formulary.factory(formula_path)))
+          .to eq(formula_path.to_s)
+      end
+
+      it "returns the same installed path with and without the API" do
+        keg_path = HOMEBREW_CELLAR/"testball/0.1"
+        (keg_path/".brew").mkpath
+        (keg_path/".brew/testball.rb").write(formula_path.read)
+        (keg_path/AbstractTab::FILENAME).write({ source: { tap: tap.name } }.to_json)
+        (HOMEBREW_PREFIX/"opt/testball").make_relative_symlink(keg_path)
+        allow(Homebrew::API).to receive_messages(formula_names: [], formula_aliases: {}, formula_renames: {},
+                                                 formula_tap_migrations: {}, formula_name?: false)
+
+        expect([nil, "1"].map do |no_api|
+          ENV["HOMEBREW_NO_INSTALL_FROM_API"] = no_api
+          tap.clear_cache
+          described_class.new([]).github_info(Formulary.factory("testball"))
+        end).to eq(["#{HOMEBREW_PREFIX}/opt/testball/.brew/testball.rb"] * 2)
+      end
+
+      it "queries the index once for multiple formulae in a tap" do
+        (formula_path.dirname/"testball2.rb").write(formula_path.read.sub("Testball", "Testball2"))
+        info = described_class.new([])
+        allow(Utils).to receive(:popen_read).and_call_original
+
+        expect(Utils).to receive(:popen_read).with(Utils::Git.git, "-C", tap.path, "ls-files", "-z")
+                                             .once.and_call_original
+
+        %w[testball testball2].each do |name|
+          info.github_info(Formulary.factory(formula_path.dirname/"#{name}.rb"))
+        end
+      end
+
+      test_each(["homebrew/foo", nil]) do |installed_tap|
+        it "returns the selected formula's path when the installed tap is #{installed_tap.inspect}" do
+          ENV["HOMEBREW_NO_INSTALL_FROM_API"] = "1"
+          keg_path = HOMEBREW_CELLAR/"testball/0.1"
+          (keg_path/".brew").mkpath
+          (keg_path/".brew/testball.rb").write(formula_path.read)
+          (keg_path/AbstractTab::FILENAME).write({ source: { tap: installed_tap } }.to_json)
+          (HOMEBREW_PREFIX/"opt/testball").make_relative_symlink(keg_path)
+
+          expect(described_class.new(["homebrew/core/testball"])
+                                .github_info(Formulary.factory("homebrew/core/testball")))
+            .to eq(formula_path.to_s)
+        end
+      end
     end
   end
 end

@@ -380,7 +380,20 @@ module Homebrew
           # which case there is no meaningful upstream URL to link to.
           return formula.path.to_s unless formula.path.to_s.start_with?("#{tap.path}/")
 
-          formula.path.relative_path_from(tap.path)
+          relative_path = formula.path.relative_path_from(tap.path)
+          unless formula.loaded_from_api?
+            @tracked_files ||= T.let({}, T.nilable(T::Hash[Tap, T::Set[String]]))
+            @tracked_files[tap] ||= Utils.popen_read(Utils::Git.git, "-C", tap.path, "ls-files",
+                                                     "-z").split("\0").to_set
+            if @tracked_files.fetch(tap).exclude?(relative_path.to_s)
+              installed_path = formula.opt_prefix/".brew/#{formula.name}.rb"
+              return installed_path.to_s if installed_path.file? && Tab.for_keg(formula.opt_prefix).tap == tap
+
+              return formula.path.to_s
+            end
+          end
+
+          relative_path
         when Cask::Cask
           cask = formula_or_cask
           tap = cask.tap
