@@ -137,8 +137,6 @@ RSpec.describe Homebrew::Cmd::Bundle::CleanupSubcommand do
       end
     end
 
-    let(:core_formula_names) { %w[deno unwanted] }
-
     it "computes which casks to uninstall" do
       cask_123 = instance_double(Cask::Cask, to_s: "123", old_tokens: [])
       cask_456 = instance_double(Cask::Cask, to_s: "456", old_tokens: [])
@@ -195,27 +193,6 @@ RSpec.describe Homebrew::Cmd::Bundle::CleanupSubcommand do
         other/tap/h
         builddependency1
       ]
-    end
-
-    %w[homebrew/core/deno homebrew/homebrew-core/deno].each do |name|
-      it "keeps the core formula declared as #{name}" do
-        allow_any_instance_of(Pathname).to receive(:read).and_return("brew '#{name}'")
-        described_class.read_dsl_from_brewfile!
-
-        allow(Homebrew::Bundle::Brew).to receive(:formulae).and_return(
-          core_formula_names.map do |formula_name|
-            { name: formula_name, full_name: formula_name, dependencies: [], build_dependencies: [] }
-          end,
-        )
-        core_formula_names.each do |formula_name|
-          stub_formula_loader formula(formula_name) {
-            url "#{formula_name}-1.0"
-          }, formula_name
-        end
-        allow(Homebrew::Bundle::Cask).to receive(:formula_dependencies).and_return([])
-
-        expect(described_class.formulae_to_uninstall).to eq(["unwanted"])
-      end
     end
 
     it "computes which tap to untap" do

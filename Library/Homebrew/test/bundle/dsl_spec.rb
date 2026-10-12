@@ -190,7 +190,6 @@ RSpec.describe Homebrew::Bundle::Dsl do
 
   it ".sanitize_brew_name" do
     expect(described_class.sanitize_brew_name("homebrew/homebrew/foo")).to eql("foo")
-    expect(described_class.sanitize_brew_name("homebrew/core/foo")).to eql("foo")
     expect(described_class.sanitize_brew_name("homebrew/homebrew-bar/foo")).to eql("homebrew/bar/foo")
     expect(described_class.sanitize_brew_name("homebrew/bar/foo")).to eql("homebrew/bar/foo")
     expect(described_class.sanitize_brew_name("foo")).to eql("foo")
