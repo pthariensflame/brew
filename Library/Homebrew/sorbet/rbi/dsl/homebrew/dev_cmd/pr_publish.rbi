@@ -17,9 +17,6 @@ class Homebrew::DevCmd::PrPublish::Args < Homebrew::CLI::Args
   sig { returns(T.nilable(String)) }
   def branch; end
 
-  sig { returns(T::Boolean) }
-  def large_runner?; end
-
   sig { returns(T.nilable(String)) }
   def message; end
 

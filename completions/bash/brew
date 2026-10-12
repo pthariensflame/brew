@@ -2469,7 +2469,6 @@ _brew_pr_publish() {
       --branch
       --debug
       --help
-      --large-runner
       --message
       --quiet
       --tap

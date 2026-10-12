@@ -16,8 +16,6 @@ module Homebrew
         switch "--autosquash",
                description: "If supported on the target tap, automatically reformat and reword commits " \
                             "to our preferred format."
-        switch "--large-runner",
-               description: "Run the upload job on a large runner."
         switch "--warn-on-upload-failure",
                hidden:      true,
                description: "Warn instead of raising an error if the bottle upload fails. " \
@@ -43,10 +41,7 @@ module Homebrew
         workflow = args.workflow || "publish-commit-bottles.yml"
         ref = args.branch || "main"
 
-        inputs = {
-          autosquash:   args.autosquash?,
-          large_runner: args.large_runner?,
-        }
+        inputs = { autosquash: args.autosquash? }
         inputs[:message] = args.message if args.message.presence
         inputs[:warn_on_upload_failure] = true if args.warn_on_upload_failure?
 
@@ -58,14 +53,9 @@ module Homebrew
 
           pr_inputs = inputs.merge(pull_request: issue)
 
-          pr_labels = GitHub.pull_request_labels(user, repo, issue)
-          if pr_labels.include?("autosquash")
+          if GitHub.pull_request_labels(user, repo, issue).include?("autosquash")
             oh1 "Found `autosquash` label on ##{issue}. Requesting autosquash."
             pr_inputs[:autosquash] = true
-          end
-          if pr_labels.include?("large-bottle-upload")
-            oh1 "Found `large-bottle-upload` label on ##{issue}. Requesting upload on large runner."
-            pr_inputs[:large_runner] = true
           end
 
           if args.tap.present? && !"#{user}/#{repo}".casecmp?(tap.full_name)
