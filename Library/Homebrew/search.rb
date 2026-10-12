@@ -94,7 +94,12 @@ module Homebrew
       end
 
       aliases = Formula.alias_full_names
-      results = T.cast(search(Formula.full_names + aliases, string_or_regex), T::Array[String]).sort
+      results = T.cast(search(Formula.full_names + aliases, string_or_regex), T::Array[String]).sort_by do |name|
+        base_name, version_str = name.split("@", 2)
+        # unversioned formulae sort higher than versioned ones
+        [base_name, Version.new(version_str || "0")]
+      end
+
       if string_or_regex.is_a?(String)
         results |= Formula.fuzzy_search(string_or_regex).map do |n|
           Formulary.factory(n).full_name
