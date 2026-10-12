@@ -32,6 +32,7 @@ module Homebrew
         @rev_lists = T.let({}, T::Hash[String, T::Array[[String, String]]])
         @complete_history = T.let({}, T::Hash[String, T::Boolean])
         @shallow_taps = T.let({}, T::Hash[String, T::Boolean])
+        @sources = T.let({}, T::Hash[[String, String, String], String])
         @platform_independence = T.let({}, T::Hash[[String, String, String], T::Boolean])
         @independent_formulae = T.let({}.compare_by_identity, T::Hash[Formula, T::Boolean])
         @shared_formulae = T.let({}, T::Hash[[String, String, String], Formula])
@@ -95,10 +96,11 @@ module Homebrew
           # Wrap the verdict so keeping the walk going (`nil`) stays
           # distinguishable from a revision that failed to load.
           key = [tap_path, rev, entry]
-          source = T.let(nil, T.nilable(String))
+          source = @sources[key] if reuse_platforms
           independent = reuse_platforms && @platform_independence.fetch(key) do
             @platform_independence[key] = begin
               source = Utils.popen_read("git", "-C", tap_key, "cat-file", "blob", "#{rev}:#{entry}", safe: true)
+              @sources[key] = source
               PlatformIndependence.source?(source)
             rescue ErrorDuringExecution
               false
