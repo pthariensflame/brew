@@ -56,7 +56,7 @@ module Homebrew
       def update_and_save!(source:, bottle_json_dir: nil, removed_formulae_file: nil, pull_request: nil,
                            repository: nil, summary_file: nil)
         source_path = Pathname(source)
-        original_database = source_path.exist? ? source_path.read : nil
+        original_database = source_path.read if source_path.exist?
         db = ExecutablesDB.new source
 
         removed_formulae = if removed_formulae_file.blank? || !File.file?(removed_formulae_file)

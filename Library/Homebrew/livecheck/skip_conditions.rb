@@ -44,7 +44,7 @@ module Homebrew
 
         return {} if !package_or_resource.livecheck.skip? && skip_message.blank?
 
-        skip_messages = skip_message ? [skip_message] : nil
+        skip_messages = [skip_message] if skip_message
         Livecheck.status_hash(package_or_resource, "skipped", skip_messages, full_name:, verbose:)
       end
 

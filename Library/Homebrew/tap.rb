@@ -714,7 +714,7 @@ class Tap
     Utils::Git.ensure_installed!
 
     use_worktree_source_tap = core_tap? || (core_cask_tap? && clone_target.nil? && !custom_remote)
-    worktree_source_tap_path = use_worktree_source_tap ? worktree_source_tap_path_for(path: HOMEBREW_REPOSITORY) : nil
+    worktree_source_tap_path = worktree_source_tap_path_for(path: HOMEBREW_REPOSITORY) if use_worktree_source_tap
 
     if installed?
       if requested_remote != remote # we are sure that clone_target is not nil and custom_remote is true here

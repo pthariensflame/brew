@@ -402,11 +402,11 @@ class StaleLeadMaintainerPrApproval
     puts "- Weekday approval window: #{status_label(data.weekday_approval_window)}"
     puts "- Created at: #{data.created_at.utc.iso8601}"
     puts "- Created at least #{HUMAN_REVIEW_WINDOW_HOURS} hours ago: #{status_label(data.old_enough_for_approval)}"
-    lead_maintainer = data.lead_maintainer_checked ? data.lead_maintainer : nil
+    lead_maintainer = data.lead_maintainer if data.lead_maintainer_checked
     puts "- Author listed as a lead maintainer in README.md: #{status_label(lead_maintainer)}"
-    approved_another_pr = data.approved_another_pr_checked ? data.approved_another_pr : nil
+    approved_another_pr = data.approved_another_pr if data.approved_another_pr_checked
     puts "- Author approved another Homebrew/brew PR in the last 7 days: #{status_label(approved_another_pr)}"
-    no_human_review_since_creation = data.reviews_checked ? data.no_human_review_since_creation : nil
+    no_human_review_since_creation = data.no_human_review_since_creation if data.reviews_checked
     puts "- No human review since creation: #{status_label(no_human_review_since_creation)}"
     if data.reviews_checked
       puts "- Human reviews since creation:"
@@ -419,7 +419,7 @@ class StaleLeadMaintainerPrApproval
       puts "- Human reviews since creation: not checked"
     end
     puts "- Copilot reviewed: #{status_label(data.reviews_checked ? data.copilot_reviewed : nil)}"
-    sensitive_files_unchanged = data.sensitive_files_checked ? data.sensitive_files_unchanged : nil
+    sensitive_files_unchanged = data.sensitive_files_unchanged if data.sensitive_files_checked
     puts "- .github/ and sensitive files unchanged: #{status_label(sensitive_files_unchanged)}"
     if data.sensitive_files_checked && !data.changed_sensitive_files.empty?
       puts "- Changed .github/ or sensitive files:"
@@ -436,7 +436,7 @@ class StaleLeadMaintainerPrApproval
     else
       puts "- Failing CI jobs: not checked"
     end
-    already_approved = data.reviews_checked ? data.already_approved : nil
+    already_approved = data.already_approved if data.reviews_checked
     puts "- Already approved by github-actions[bot] for this commit: #{status_label(already_approved)}"
     data.failure_messages.each { |failure| puts "- Failure: #{failure}" }
     data
