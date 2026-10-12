@@ -56,16 +56,16 @@ module Homebrew
           _, user, repo, issue = *url_match
           odie "Not a GitHub pull request: #{arg}" if !user || !repo || !issue
 
-          inputs[:pull_request] = issue
+          pr_inputs = inputs.merge(pull_request: issue)
 
           pr_labels = GitHub.pull_request_labels(user, repo, issue)
           if pr_labels.include?("autosquash")
             oh1 "Found `autosquash` label on ##{issue}. Requesting autosquash."
-            inputs[:autosquash] = true
+            pr_inputs[:autosquash] = true
           end
           if pr_labels.include?("large-bottle-upload")
             oh1 "Found `large-bottle-upload` label on ##{issue}. Requesting upload on large runner."
-            inputs[:large_runner] = true
+            pr_inputs[:large_runner] = true
           end
 
           if args.tap.present? && !"#{user}/#{repo}".casecmp?(tap.full_name)
@@ -73,7 +73,7 @@ module Homebrew
           end
 
           ohai "Dispatching #{tap} pull request ##{issue}"
-          GitHub.workflow_dispatch_event(user, repo, workflow, ref, **inputs)
+          GitHub.workflow_dispatch_event(user, repo, workflow, ref, **pr_inputs)
         end
       end
     end
