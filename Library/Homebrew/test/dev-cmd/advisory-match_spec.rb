@@ -1536,11 +1536,12 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
       allow(history).to receive(:platform_independent?).and_return(false)
       allow(history).to receive(:walk).with(anything, complete: true, reuse_platforms: true) do |_, **_, &block|
         linux = Homebrew::SimulateSystem.simulating_or_running_on_linux?
-        block.call(resource_formula("2.0", if linux
-                     formerly_on_linux ? "1.0" : nil
-                   else
-                     "1.2"
-        end))
+        resource_version = if linux
+          formerly_on_linux ? "1.0" : nil
+        else
+          "1.2"
+        end
+        block.call(resource_formula("2.0", resource_version))
         block.call(resource_formula("1.0", linux ? nil : "1.0"))
         :history_unavailable if linux && linux_history_unavailable
       end
