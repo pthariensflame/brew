@@ -674,13 +674,26 @@ module Cask
 
             notarization_check(path)
           when Artifact::Suite, Artifact::Artifact
+            bundle_extnames = %w[
+              .app .bundle .colorpicker .component .mdimporter .plugin .prefpane .saver .service .vst .vst3
+            ]
             # `gktool scan` fails any plain folder, so check the bundles and executables inside instead.
             failed_path, failed_result = path.find do |found|
               next if found.symlink?
 
-              bundle = found.directory? && %w[
-                .app .bundle .colorpicker .component .mdimporter .plugin .prefpane .saver .service .vst .vst3
-              ].include?(found.extname.downcase)
+              bundle = found.directory? && bundle_extnames.include?(found.extname.downcase)
+              # Gatekeeper can reject quarantined resource-only bundles, so traverse them as plain folders.
+              if bundle && found.extname.downcase == ".bundle" &&
+                 !(found/"Contents/Info.plist").file? && !(found/"Info.plist").file?
+                bundle = found.find.any? do |child|
+                  # The outer traversal assesses nested bundles separately.
+                  Find.prune if child != found && child.directory? && bundle_extnames.include?(child.extname.downcase)
+                  next false unless child.file?
+
+                  binary = BinaryPathname.wrap(child)
+                  binary.binary_executable? || binary.dylib? || binary.mach_o_bundle?
+                end
+              end
               found_result = if bundle
                 gatekeeper_scan(found)
               elsif found.file? && found.executable? && BinaryPathname.wrap(found).binary_executable?
