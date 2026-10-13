@@ -41,7 +41,14 @@ RSpec.describe Cask::CI::Check do
 
   it "ignores known Apple and Google running jobs" do
     after = empty_snapshot.merge(
-      loaded_launchjobs: ["application.com.apple.Safari.123", "application.com.google.GoogleUpdater.123"],
+      loaded_launchjobs: [
+        "application.com.apple.helpviewer.123",
+        "application.com.apple.mail.123",
+        "application.com.apple.Music.123",
+        "application.com.apple.Safari.123",
+        "application.com.apple.TextEdit.123",
+        "application.com.google.GoogleUpdater.123",
+      ],
     )
 
     expect(described_class.errors(empty_snapshot, after, cask:)).to be_empty

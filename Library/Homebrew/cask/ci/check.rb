@@ -15,7 +15,8 @@ module Cask
       Snapshot = T.type_alias { T::Hash[Symbol, T::Array[String]] }
 
       APPLE_LAUNCHJOBS_REGEX = /\A(?:application\.)?com\.apple\.
-        (AppStore|installer|Preview|Safari|shortcuts|systemevents|systempreferences|Terminal)
+        (AppStore|helpviewer|installer|mail|Music|Preview|Safari|shortcuts|
+         systemevents|systempreferences|Terminal|TextEdit)
         (?:\.|$)/x
       private_constant :APPLE_LAUNCHJOBS_REGEX
 
