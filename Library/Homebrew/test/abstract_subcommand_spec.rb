@@ -81,6 +81,7 @@ RSpec.describe Homebrew::AbstractSubcommand do
         def run; end
       end
       stub_const("SubcommandTestCmd::NestedSubcommand", nested_subcommand)
+      allow(Homebrew::AbstractCommand).to receive(:subclasses).and_return([SubcommandTestCmd])
 
       expect(nested_subcommand.command).to be(SubcommandTestCmd)
     end

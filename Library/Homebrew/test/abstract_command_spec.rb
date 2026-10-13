@@ -37,6 +37,8 @@ RSpec.describe Homebrew::AbstractCommand do
       end
 
       it "can lookup command" do
+        allow(described_class).to receive(:subclasses).and_return([TestCat])
+
         expect(described_class.command("test-cat")).to be(TestCat)
       end
 
