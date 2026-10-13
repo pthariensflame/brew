@@ -19,6 +19,9 @@ module SharedEnvExtension
 
   requires_ancestor { Sorbet::Private::Static::ENVClass }
 
+  autoload :State, "extend/ENV/state"
+  private_constant :State
+
   CC_FLAG_VARS = %w[CFLAGS CXXFLAGS OBJCFLAGS OBJCXXFLAGS].freeze
   private_constant :CC_FLAG_VARS
 
@@ -39,7 +42,7 @@ module SharedEnvExtension
   private_constant :SANITIZED_VARS
 
   sig { returns(T.nilable(String)) }
-  attr_reader :bottle_arch
+  def bottle_arch = build_environment_state.bottle_arch
 
   sig {
     params(
@@ -53,20 +56,21 @@ module SharedEnvExtension
   }
   def setup_build_environment(formula: nil, cc: nil, build_bottle: false, bottle_arch: nil, testing_formula: false,
                               debug_symbols: false)
-    @formula = T.let(formula, T.nilable(Formula))
-    @cc = T.let(cc, T.nilable(String))
-    @build_bottle = T.let(build_bottle, T.nilable(T::Boolean))
-    @bottle_arch = T.let(bottle_arch, T.nilable(String))
-    @debug_symbols = T.let(debug_symbols, T.nilable(T::Boolean))
-    @testing_formula = T.let(testing_formula, T.nilable(T::Boolean))
+    state = build_environment_state(writable: true)
+    state.formula = formula
+    state.cc = cc
+    state.build_bottle = build_bottle
+    state.bottle_arch = bottle_arch
+    state.debug_symbols = debug_symbols
+    state.testing_formula = testing_formula
     reset
   end
 
   sig { returns(T::Boolean) }
-  def build_bottle? = @build_bottle == true
+  def build_bottle? = build_environment_state.build_bottle == true
 
   sig { returns(T::Boolean) }
-  def debug_symbols? = @debug_symbols == true
+  def debug_symbols? = build_environment_state.debug_symbols == true
 
   sig { void }
   def reset
@@ -222,8 +226,11 @@ module SharedEnvExtension
   # end</pre>
   sig { returns(T.any(Symbol, String)) }
   def compiler
-    @compiler ||= T.let(nil, T.nilable(T.any(Symbol, String)))
-    @compiler ||= if (cc = @cc)
+    compiler = build_environment_state.compiler
+    return compiler if compiler
+
+    state = build_environment_state(writable: true)
+    state.compiler = if (cc = state.cc)
       warn_about_non_apple_gcc(cc) if cc.match?(GNU_GCC_REGEXP)
 
       fetch_compiler(cc, "--cc")
@@ -232,14 +239,14 @@ module SharedEnvExtension
 
       compiler = fetch_compiler(cc, "HOMEBREW_CC")
 
-      if @formula
+      if (formula = state.formula)
         compilers = [compiler] + CompilerSelector.compilers
-        compiler = CompilerSelector.select_for(@formula, compilers, testing_formula: @testing_formula == true)
+        compiler = CompilerSelector.select_for(formula, compilers, testing_formula: state.testing_formula)
       end
 
       compiler
-    elsif @formula
-      CompilerSelector.select_for(@formula, testing_formula: @testing_formula == true)
+    elsif (formula = state.formula)
+      CompilerSelector.select_for(formula, testing_formula: state.testing_formula)
     else
       DevelopmentTools.default_compiler
     end
@@ -258,7 +265,8 @@ module SharedEnvExtension
 
   COMPILERS.each do |compiler|
     define_method(compiler) do
-      @compiler = T.let(compiler, T.nilable(T.any(Symbol, String)))
+      T.bind(self, SharedEnvExtension)
+      build_environment_state(writable: true).compiler = compiler
 
       send(:cc=, send(:determine_cc))
       send(:cxx=, send(:determine_cxx))
@@ -270,9 +278,9 @@ module SharedEnvExtension
     # Ignore repeated calls to this function as it will misleadingly warn about
     # building with an alternative Fortran compiler without optimization flags,
     # despite it often being the Homebrew-provided one set up in the first call.
-    return if @fortran_setup_done
+    return if build_environment_state.fortran_setup_done
 
-    @fortran_setup_done = T.let(true, T.nilable(TrueClass))
+    build_environment_state(writable: true).fortran_setup_done = true
 
     flags = []
 
@@ -298,8 +306,8 @@ module SharedEnvExtension
 
   sig { returns(Symbol) }
   def effective_arch
-    if @build_bottle && @bottle_arch
-      @bottle_arch.to_sym
+    if build_bottle? && (arch = bottle_arch)
+      arch.to_sym
     else
       Hardware.oldest_cpu
     end
@@ -351,6 +359,17 @@ module SharedEnvExtension
   def refurbish_args; end
 
   private
+
+  sig { params(writable: T::Boolean).returns(State) }
+  def build_environment_state(writable: false)
+    return State.process if equal?(ENV)
+
+    @build_environment_state ||= T.let(State.new, T.nilable(State))
+    # Hash#dup copies instance variables but drops singleton methods, so detach
+    # before writes to preserve the state of copies that have not been extended yet.
+    @build_environment_state = @build_environment_state.dup if writable
+    @build_environment_state
+  end
 
   sig { params(_flags: T::Array[String], _map: T::Hash[Symbol, String]).void }
   def set_cpu_flags(_flags, _map = {}); end
