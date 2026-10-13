@@ -1014,6 +1014,50 @@ RSpec.describe Cask::Audit, :cask do
           expect(run).to error_with(%r{Signature verification failed for Audit Suite/Bad\.app:})
         end
 
+        context "when the suite contains a .bundle directory" do
+          let(:bundle) { suite/".install4j/Messages.bundle" }
+
+          before do
+            (bundle/"Contents/Resources/en.lproj").mkpath
+            (bundle/"Contents/Resources/en.lproj/Localizable.strings").write('"hello" = "Hello";')
+            allow(BinaryPathname).to receive(:wrap) { it }
+            stub_check("gktool", "scan", bundle)
+          end
+
+          it "skips resource-only bundles" do
+            expect(run).to pass
+          end
+
+          test_each(%w[Contents/Info.plist Info.plist]) do |plist|
+            it "checks bundles with #{plist}" do
+              (bundle/plist).write("plist")
+              expect(run).to error_with(/Signature verification failed/)
+            end
+          end
+
+          test_each([:binary_executable?, :dylib?, :mach_o_bundle?]) do |type|
+            it "checks bundles containing #{type} code without an Info.plist" do
+              (bundle/"Contents/code").write("code")
+              binary = instance_double(Pathname, binary_executable?: false, dylib?: false, mach_o_bundle?: false)
+              allow(binary).to receive(type).and_return(true)
+              allow(BinaryPathname).to receive(:wrap).with(bundle/"Contents/code").and_return(binary)
+              expect(run).to error_with(/Signature verification failed/)
+            end
+          end
+
+          test_each(%w[app bundle plugin]) do |extension|
+            it "checks .#{extension} bundles with code nested inside resource-only bundles" do
+              nested = bundle/"Nested.#{extension}"
+              (nested/"Contents/MacOS").mkpath
+              FileUtils.install TEST_FIXTURE_DIR/"mach/a.out", nested/"Contents/MacOS/nested", mode: 0755
+              allow(BinaryPathname).to receive(:wrap).with(nested/"Contents/MacOS/nested")
+                                                     .and_return(instance_double(Pathname, binary_executable?: true))
+              stub_check("gktool", "scan", nested)
+              expect(run).to error_with(/Signature verification failed for .*Nested\.#{extension}:/)
+            end
+          end
+        end
+
         it "does not check a suite without code" do
           (suite/"lib").mkpath
           FileUtils.touch suite/"lib/audit.jar"
