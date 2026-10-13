@@ -18,7 +18,7 @@ RSpec.describe Formatter do
     end
 
     it "doesn't output columns if $stdout is not a TTY." do
-      allow_any_instance_of(IO).to receive(:tty?).and_return(false)
+      allow($stdout).to receive(:tty?).and_return(false)
       allow(Tty).to receive(:width).and_return(10)
 
       expect(columns).to eq(
@@ -31,7 +31,7 @@ RSpec.describe Formatter do
 
     describe "$stdout is a TTY" do
       it "outputs columns" do
-        allow_any_instance_of(IO).to receive(:tty?).and_return(true)
+        allow($stdout).to receive(:tty?).and_return(true)
         allow(Tty).to receive(:width).and_return(10)
 
         expect(columns).to eq(
@@ -41,7 +41,7 @@ RSpec.describe Formatter do
       end
 
       it "outputs only one line if everything fits" do
-        allow_any_instance_of(IO).to receive(:tty?).and_return(true)
+        allow($stdout).to receive(:tty?).and_return(true)
         allow(Tty).to receive(:width).and_return(20)
 
         expect(columns).to eq(

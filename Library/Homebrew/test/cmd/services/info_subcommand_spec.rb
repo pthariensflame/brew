@@ -5,7 +5,7 @@ require "cmd/services"
 
 RSpec.describe Homebrew::Cmd::Services::InfoSubcommand do
   before do
-    allow_any_instance_of(IO).to receive(:tty?).and_return(false)
+    allow($stdout).to receive(:tty?).and_return(false)
   end
 
   describe "#run" do
