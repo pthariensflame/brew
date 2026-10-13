@@ -99,4 +99,37 @@ RSpec.describe Homebrew::Bundle do
       end
     end
   end
+
+  describe ".mark_as_installed_on_request! with formula names", :no_api do
+    after do
+      FileUtils.rm_rf HOMEBREW_TAP_DIRECTORY/"testuser"
+    end
+
+    %w[deno deno-alias deno-old homebrew/core/deno testuser/testtap/deno].each do |name|
+      it "marks the installed receipt for #{name}" do
+        T.bind(self, RSpec::Core::ExampleGroup)
+        tap = name.start_with?("testuser/") ? Tap.fetch("testuser/testtap") : CoreTap.instance
+        formula_path = tap.new_formula_path("deno")
+        formula_path.dirname.mkpath
+        formula_path.write <<~RUBY
+          class Deno < Formula
+            url "https://brew.sh/deno-1.0.tar.gz"
+          end
+        RUBY
+        (tap.path/"Aliases").mkpath
+        (tap.path/"Aliases/deno-alias").make_symlink(formula_path)
+        (tap.path/"formula_renames.json").write JSON.generate("deno-old" => "deno")
+        tap.clear_cache
+        receipt = HOMEBREW_CELLAR/"deno/1.0"/AbstractTab::FILENAME
+        receipt.dirname.mkpath
+        tab = Tab.empty
+        tab.tabfile = receipt
+        tab.write
+
+        described_class.mark_as_installed_on_request!([Homebrew::Bundle::Dsl::Entry.new(:brew, name)])
+
+        expect(JSON.parse(receipt.read).fetch("installed_on_request")).to be(true)
+      end
+    end
+  end
 end

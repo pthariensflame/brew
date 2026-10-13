@@ -119,7 +119,7 @@ module Homebrew
         formulae_to_update = entries.filter_map do |entry|
           next if entry.type != :brew
 
-          name = entry.name
+          name = Formulary.canonical_name(entry.name)
           next if installed_formulae.exclude?(name)
 
           tab = Tab.for_name(name)
