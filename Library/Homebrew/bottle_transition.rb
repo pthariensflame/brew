@@ -5,8 +5,11 @@ require "formula"
 require "formulary"
 require "test_runner_formula"
 
-# Preserve bottles while bootstrapping a macOS release.
-# TODO: remove this class and its callers when `HOMEBREW_MACOS_NEWEST_SUPPORTED` is `27`.
+# Preserve existing bottles while bootstrapping a new macOS release.
+# Before mass bottling for each new macOS release, set `MACOS` to its symbol
+# from `MacOSVersion::SYMBOLS` and update the release symbols in
+# `test/bottle_transition_spec.rb`. The checks stay inactive until `MACOS` is
+# newer than `HOMEBREW_MACOS_NEWEST_SUPPORTED`.
 class BottleTransition
   MACOS = :golden_gate
 
