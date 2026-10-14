@@ -704,6 +704,56 @@ RSpec.describe "Utils::Curl" do
       expect(response[:etag]).to eq("bbb")
       expect(response[:final_url]).to eq("https://brew.sh/b")
     end
+
+    describe "body encoding" do
+      def body_encoding_for(body, content_type: "text/html")
+        allow(self).to receive(:curl_output) do |*arguments, **_options|
+          File.binwrite(arguments.drop_while { |argument| argument != "--output" }.fetch(1), body)
+          ["HTTP/1.1 200 OK\r\nContent-Type: #{content_type}\r\n\r\n", "",
+           instance_double(Process::Status, success?: true, exitstatus: 0)]
+        end
+        curl_http_content_headers_and_checksum("https://brew.sh/")[:file].encoding
+      end
+
+      it "uses the charset from the `Content-Type` header" do
+        expect(body_encoding_for("", content_type: "text/html; charset=Shift_JIS")).to eq(Encoding::Shift_JIS)
+      end
+
+      it "parses a quoted `Content-Type` header charset case-insensitively" do
+        expect(body_encoding_for("", content_type: 'text/html; Charset="Shift_JIS"')).to eq(Encoding::Shift_JIS)
+      end
+
+      it "guesses the charset from a `<meta http-equiv>` tag" do
+        body = '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">'
+        expect(body_encoding_for(body)).to eq(Encoding::ISO_8859_1)
+      end
+
+      it "guesses the charset from a `<meta charset>` tag" do
+        expect(body_encoding_for('<meta charset="Shift_JIS">')).to eq(Encoding::Shift_JIS)
+      end
+
+      it "ignores attributes that only end in `charset`" do
+        expect(body_encoding_for('<meta data-charset="Shift_JIS"><meta charset="UTF-8">')).to eq(Encoding::UTF_8)
+      end
+
+      it "ignores `<meta>` tags in HTML comments" do
+        expect(body_encoding_for('<!-- <meta charset="Shift_JIS"> --><meta charset="UTF-8">')).to eq(Encoding::UTF_8)
+      end
+
+      it "prefers the `Content-Type` header charset to a `<meta>` tag" do
+        body = '<meta charset="Shift_JIS">'
+        expect(body_encoding_for(body, content_type: "text/html; charset=ISO-8859-1")).to eq(Encoding::ISO_8859_1)
+      end
+
+      it "ignores a `<meta>` tag after the first 1024 bytes" do
+        body = "#{" " * 1024}<meta charset=\"Shift_JIS\">"
+        expect(body_encoding_for(body)).to eq(Encoding.default_external)
+      end
+
+      it "ignores charsets that are not ASCII-compatible" do
+        expect(body_encoding_for('<meta charset="UTF-16">')).to eq(Encoding.default_external)
+      end
+    end
   end
 
   describe "::curl_check_http_content" do
@@ -778,6 +828,28 @@ RSpec.describe "Utils::Curl" do
       record_head_only(response.merge(status_code: nil, exit_status: 28))
       expect(curl_check_http_content("https://brew.sh/", "homepage URL"))
         .to include("is not reachable")
+    end
+
+    it "matches the same content declared in different charsets" do
+      body = "<p>café</p>"
+      allow(self).to receive(:curl_http_content_headers_and_checksum) do |url, **_options|
+        if url.start_with?("https:")
+          response.merge(final_url: url, file: body, file_hash: "https")
+        else
+          response.merge(file: body.encode(Encoding::ISO_8859_1), file_hash: "http")
+        end
+      end
+      expect(curl_check_http_content("http://brew.sh/", "homepage URL", check_content: true))
+        .to eq("The homepage URL http://brew.sh/ should use HTTPS rather than HTTP")
+    end
+
+    it "compares content in a charset that cannot be converted to UTF-8" do
+      body = "<p>caf\xE9</p>".b.force_encoding("Windows-1258")
+      allow(self).to receive(:curl_http_content_headers_and_checksum) do |url, **_options|
+        response.merge(final_url: url, file: body, file_hash: url)
+      end
+      expect { curl_check_http_content("http://brew.sh/", "homepage URL", check_content: true) }
+        .not_to raise_error
     end
   end
 
