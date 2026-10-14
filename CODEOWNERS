@@ -8,6 +8,7 @@
 #
 # Note: teams without write-access to this repository cannot be listed in this file.
 
+CODEOWNERS             @Homebrew/lead-maintainers @MikeMcQuaid
 docs/Support-Tiers.md  @Homebrew/lead-maintainers @MikeMcQuaid
 
 Library/Homebrew/sandbox.rb                            @Homebrew/security
