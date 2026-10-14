@@ -284,6 +284,21 @@ RSpec.describe Homebrew::API::FormulaStruct do
       expect(restored).to eq(original)
     end
 
+    it "preserves tagged dependencies after serialize then deserialize" do
+      original = described_class.new(
+        desc:                 "tagged dependencies",
+        homepage:             "https://example.com",
+        license:              "MIT",
+        ruby_source_checksum: "abc123",
+        stable_version:       "1.0.0",
+        stable_dependencies:  ["dep1", { "dep2" => :no_linkage }, { "dep3" => [:test, :no_linkage] }],
+      )
+
+      restored = described_class.deserialize(original.serialize)
+
+      expect(restored.stable_dependencies).to eq(original.stable_dependencies)
+    end
+
     it "serializes post-install steps", :needs_macos do
       original = described_class.new(
         desc:                 "install steps test",

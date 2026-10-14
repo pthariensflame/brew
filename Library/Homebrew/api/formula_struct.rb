@@ -47,8 +47,8 @@ module Homebrew
           T.any(
             # Formula name: "foo"
             String,
-            # Formula name and dependency type: { "foo" => :build }
-            T::Hash[String, Symbol],
+            # Formula name and dependency types: { "foo" => :build } or { "foo" => [:test, :no_linkage] }
+            T::Hash[String, T.any(Symbol, T::Array[Symbol])],
           ),
           # Requirements
           T.any(
