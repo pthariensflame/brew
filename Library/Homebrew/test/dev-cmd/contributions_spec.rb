@@ -630,7 +630,7 @@ RSpec.describe Homebrew::DevCmd::Contributions do
       .with("", is: "merged", user: "Homebrew", author: "alice", merged: "2026-01-01..2026-01-31")
       .and_return([{ "number" => 123, "repository_url" => "#{GitHub::API_URL}/repos/#{repository}" }])
     expect(GitHub).to receive(:search_approved_pull_requests_in_user_or_organisation)
-      .with("Homebrew", "alice", from: "2026-01-01", to: "2026-02-01")
+      .with("Homebrew", "alice", from: "2026-01-01", to: "2026-01-31")
       .and_return([])
 
     results = command.scan_contributions(
@@ -944,13 +944,13 @@ RSpec.describe Homebrew::DevCmd::Contributions do
       .with("", is: "merged", user: "Homebrew", author: "alice", merged: "2025-12-01..2026-02-28")
       .and_return([])
     allow(GitHub).to receive(:search_approved_pull_requests_in_user_or_organisation)
-      .with("Homebrew", "alice", from: "2025-12-01", to: "2026-03-01")
+      .with("Homebrew", "alice", from: "2025-12-01", to: "2026-02-28")
       .and_return(Array.new(100) do
         { "repository_url" => "#{GitHub::API_URL}/repos/Homebrew/homebrew-cask" }
       end)
     expect(GitHub).to receive(:search_issues)
       .with("", is: "pr", review: "approved", repo: "Homebrew/brew", reviewed_by: "alice",
-            from: "2025-12-01", to: "2026-03-01")
+            from: "2025-12-01", to: "2026-02-28")
       .and_return(Array.new(25) { {} })
 
     results = command.scan_contributions(
@@ -969,7 +969,7 @@ RSpec.describe Homebrew::DevCmd::Contributions do
     end).to eq("Homebrew/brew" => 25, "Homebrew/homebrew-core" => 0, "Homebrew/homebrew-cask" => 100)
   end
 
-  it "uses the existing approved review search" do
+  it "excludes the end date from approved review searches" do
     command = described_class.new(["--maintainer-report-csv=2026-1"])
     repositories = Homebrew::DevCmd::Contributions::PRIMARY_REPOS.to_h do |repository|
       [repository, [Pathname("/#{repository}"), "origin/HEAD"]]
@@ -985,7 +985,7 @@ RSpec.describe Homebrew::DevCmd::Contributions do
       .with("", is: "merged", user: "Homebrew", author: "alice", merged: "2025-12-01..2026-02-28")
       .and_return([])
     allow(GitHub).to receive(:search_approved_pull_requests_in_user_or_organisation)
-      .with("Homebrew", "alice", from: "2025-12-01", to: "2026-03-01")
+      .with("Homebrew", "alice", from: "2025-12-01", to: "2026-02-28")
       .and_return([
         { "repository_url" => "#{GitHub::API_URL}/repos/Homebrew/brew" },
         { "repository_url" => "#{GitHub::API_URL}/repos/Homebrew/homebrew-core" },
