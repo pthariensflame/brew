@@ -20,16 +20,34 @@ module Superenv
   include Utils::Output::Mixin
 
   sig { returns(T::Array[Formula]) }
-  attr_accessor :keg_only_deps
+  def keg_only_deps = build_environment_state.keg_only_deps
+
+  sig { params(deps: T::Array[Formula]).void }
+  def keg_only_deps=(deps)
+    build_environment_state(writable: true).keg_only_deps = deps
+  end
 
   sig { returns(T::Array[Formula]) }
-  attr_accessor :deps
+  def deps = build_environment_state.deps
+
+  sig { params(deps: T::Array[Formula]).void }
+  def deps=(deps)
+    build_environment_state(writable: true).deps = deps
+  end
 
   sig { returns(T::Array[Formula]) }
-  attr_accessor :run_time_deps
+  def run_time_deps = build_environment_state.run_time_deps
+
+  sig { params(deps: T::Array[Formula]).void }
+  def run_time_deps=(deps)
+    build_environment_state(writable: true).run_time_deps = deps
+  end
 
   sig { params(base: Superenv).void }
   def self.extended(base)
+    # Runtime signatures on the dependency setters resolve Formula on first call.
+    require "formula"
+
     base.keg_only_deps = []
     base.deps = []
     base.run_time_deps = []
@@ -51,15 +69,6 @@ module Superenv
     return false if env == "std"
 
     !bin.nil?
-  end
-
-  sig { void }
-  def initialize
-    @keg_only_deps = T.let([], T::Array[Formula])
-    @deps = T.let([], T::Array[Formula])
-    @run_time_deps = T.let([], T::Array[Formula])
-
-    @formula = T.let(nil, T.nilable(Formula))
   end
 
   sig { void }
@@ -111,7 +120,7 @@ module Superenv
     self["HOMEBREW_INCLUDE_PATHS"] = determine_include_paths&.to_s
     self["HOMEBREW_LIBRARY_PATHS"] = determine_library_paths&.to_s
     self["HOMEBREW_DEPENDENCIES"] = determine_dependencies
-    self["HOMEBREW_FORMULA_PREFIX"] = @formula.prefix.to_s unless @formula.nil?
+    self["HOMEBREW_FORMULA_PREFIX"] = formula.prefix.to_s if formula
     # Prevent the OpenSSL rust crate from building a vendored OpenSSL.
     # https://github.com/sfackler/rust-openssl/blob/994e5ff8c63557ab2aa85c85cc6956b0b0216ca7/openssl/src/lib.rs#L65
     self["OPENSSL_NO_VENDOR"] = "1"

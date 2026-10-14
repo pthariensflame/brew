@@ -6,8 +6,45 @@ require "extend/ENV"
 RSpec.describe "ENV" do
   subject(:env) { {}.extend(EnvActivation).extend(described_class) }
 
+  it "configures the process environment", :integration_test do
+    expect do
+      brew "ruby", "-e", <<~RUBY
+        require "extend/ENV"
+        ENV.activate_extensions!
+        ENV.setup_build_environment(build_bottle: true, bottle_arch: Hardware.oldest_cpu.to_s, debug_symbols: true)
+        puts ENV.build_bottle?, ENV.bottle_arch, ENV.debug_symbols?
+      RUBY
+    end.to output("true\n#{Hardware.oldest_cpu}\ntrue\n").to_stdout.and not_to_output.to_stderr.and be_a_success
+  end
+
+  it "loads build state without preloading formula" do
+    ENV["HOMEBREW_SORBET_RUNTIME"] = "1"
+
+    expect(Utils.popen_read(*HOMEBREW_RUBY_EXEC_ARGS,
+                            "-I", $LOAD_PATH.join(File::PATH_SEPARATOR), "-rglobal",
+                            "-e", 'require "extend/ENV/super"; {}.extend(Superenv); puts "loaded"', err: :out))
+      .to eq("loaded\n")
+  end
+
   shared_examples EnvActivation do
     include Context
+
+    it "keeps compiler choices separate for copied environments" do
+      subject.clang
+      copy = subject.dup.extend(EnvActivation).extend(described_class)
+      copy.public_send(:"gcc-9")
+
+      expect([subject.compiler, copy.compiler]).to eq([:clang, "gcc-9"])
+    end
+
+    it "preserves the compiler when a copied environment is activated later" do
+      subject.clang
+      copy = subject.dup
+      subject.public_send(:"gcc-9")
+      copy.extend(EnvActivation).extend(described_class)
+
+      expect([subject.compiler, copy.compiler]).to eq(["gcc-9", :clang])
+    end
 
     it "supports switching compilers" do
       subject.clang
