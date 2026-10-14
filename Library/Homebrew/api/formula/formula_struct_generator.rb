@@ -152,6 +152,7 @@ module Homebrew
             "test_dependencies"        => hash["test_dependencies"] || [],
             "recommended_dependencies" => hash["recommended_dependencies"] || [],
             "optional_dependencies"    => hash["optional_dependencies"] || [],
+            "no_linkage_dependencies"  => hash["no_linkage_dependencies"] || [],
             "uses_from_macos"          => hash["uses_from_macos"] || [],
             "uses_from_macos_bounds"   => hash["uses_from_macos_bounds"] || [],
           }
@@ -245,10 +246,17 @@ module Homebrew
 
         sig { params(deps_hash: DependencyHash).returns(T::Array[FormulaStruct::DependsOnArgs]) }
         def process_dependencies(deps_hash)
-          dependencies = deps_hash.fetch("dependencies", [])
+          no_linkage_names = deps_hash.fetch("no_linkage_dependencies", [])
+          dependencies = deps_hash.fetch("dependencies", []).map do |dep|
+            next dep unless no_linkage_names.include?(dep)
+
+            { dep => :no_linkage }
+          end
           dependencies + [:build, :test, :recommended, :optional].filter_map do |type|
             deps_hash["#{type}_dependencies"]&.map do |dep|
-              { dep => type }
+              next { dep => type } unless no_linkage_names.include?(dep)
+
+              { dep => [type, :no_linkage] }
             end
           end.flatten(1)
         end

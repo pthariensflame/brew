@@ -439,6 +439,13 @@ class Formula
     return unless spec.url
 
     spec.owner = self
+    spec.declared_deps.reject(&:implicit?).group_by(&:name).each do |dep_name, declarations|
+      next if declarations.none?(&:no_linkage?)
+      next if declarations.all?(&:no_linkage?)
+
+      raise FormulaSpecificationError,
+            "#{full_name}: conflicting :no_linkage declarations for #{dep_name.inspect} in the #{name} spec"
+    end
     add_global_deps_to_spec(spec)
     instance_variable_set(:"@#{name}", spec)
   end
@@ -3135,6 +3142,7 @@ class Formula
       "test_dependencies"               => [],
       "recommended_dependencies"        => [],
       "optional_dependencies"           => [],
+      "no_linkage_dependencies"         => [],
       "uses_from_macos"                 => [],
       "uses_from_macos_bounds"          => [],
       "requirements"                    => serialized_requirements,
@@ -3401,6 +3409,10 @@ class Formula
                                                    .reject(&:uses_from_macos?)
                                                    .map(&:name)
                                                    .uniq
+      dep_hash["no_linkage_dependencies"] = spec_deps.select(&:no_linkage?)
+                                                     .reject(&:uses_from_macos?)
+                                                     .map(&:name)
+                                                     .uniq
 
       uses_from_macos_deps = spec_deps.select(&:uses_from_macos?).uniq
       dep_hash["uses_from_macos"] = uses_from_macos_deps.map do |dep|
@@ -4674,6 +4686,15 @@ class Formula
     #
     # ```ruby
     # depends_on "node" => :test
+    # ```
+    #
+    # `:no_linkage` declares that the formula does not link against this dependency.
+    # It does not change when the dependency is required.
+    # All declarations of the same dependency within a spec and platform must
+    # agree on `:no_linkage`; stable, HEAD and different platforms may differ.
+    #
+    # ```ruby
+    # depends_on "python@3.14" => :no_linkage
     # ```
     #
     # `:recommended` dependencies are built by default.

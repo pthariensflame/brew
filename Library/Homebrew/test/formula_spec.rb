@@ -2105,6 +2105,101 @@ RSpec.describe Formula do
     expect(h["patches"]).to eq([])
   end
 
+  specify "#to_hash dependencies" do
+    f = formula "foo" do
+      T.bind(self, T.class_of(Formula))
+      url "foo-1.0"
+      depends_on "bar"
+      depends_on "baz" => :no_linkage
+      head do
+        url "foo-HEAD"
+        depends_on "qux" => [:test, :no_linkage]
+      end
+    end
+    stub_formula_loader(f)
+
+    expect(f.to_hash).to include(
+      "dependencies"            => ["bar", "baz"],
+      "test_dependencies"       => [],
+      "no_linkage_dependencies" => ["baz"],
+      "head_dependencies"       => include("test_dependencies"       => ["qux"],
+                                           "no_linkage_dependencies" => ["baz", "qux"]),
+    )
+  end
+
+  describe "dependency linkage declarations" do
+    test_each([[[], [:test, :no_linkage]], [[:no_linkage], [:test]], [[], [:no_linkage]]]
+                .flat_map { |tags| [tags, tags.reverse] }) do |(first_tags, second_tags)|
+      it "rejects conflicting #{first_tags} then #{second_tags} declarations" do
+        expect do
+          formula "foo" do
+            T.bind(self, T.class_of(Formula))
+            url "foo-1.0"
+            depends_on "bar" => first_tags
+            depends_on "bar" => second_tags
+          end
+        end.to raise_error(FormulaSpecificationError,
+                           'foo: conflicting :no_linkage declarations for "bar" in the stable spec')
+      end
+    end
+
+    it "allows matching declarations across roles" do
+      f = formula "foo" do
+        T.bind(self, T.class_of(Formula))
+        url "foo-1.0"
+        depends_on "bar" => :no_linkage
+        depends_on "bar" => [:test, :no_linkage]
+      end
+
+      expect(f.declared_deps.map(&:tags)).to eq([[:no_linkage], [:test, :no_linkage]])
+    end
+
+    it "ignores implicit dependencies when validating declarations" do
+      f = formula "foo" do
+        T.bind(self, T.class_of(Formula))
+        stable do
+          url "foo-1.0"
+          dependency_collector.add(Dependency.new("bar", [:build, :implicit]))
+          depends_on "bar" => :no_linkage
+        end
+      end
+
+      expect(f.declared_deps.map(&:tags)).to eq([[:build, :implicit], [:no_linkage]])
+    end
+
+    it "allows stable and HEAD to have different linkage declarations" do
+      f = formula "foo" do
+        T.bind(self, T.class_of(Formula))
+        stable do
+          url "foo-1.0"
+          depends_on "bar"
+        end
+        head do
+          url "foo-HEAD"
+          depends_on "bar" => :no_linkage
+        end
+      end
+
+      expect([f.stable&.declared_deps&.map(&:tags), f.head&.declared_deps&.map(&:tags)])
+        .to eq([[[]], [[:no_linkage]]])
+    end
+
+    it "rejects conflicting HEAD declarations while loading stable" do
+      expect do
+        formula "foo" do
+          T.bind(self, T.class_of(Formula))
+          url "foo-1.0"
+          depends_on "bar"
+          head do
+            url "foo-HEAD"
+            depends_on "bar" => [:test, :no_linkage]
+          end
+        end
+      end.to raise_error(FormulaSpecificationError,
+                         'foo: conflicting :no_linkage declarations for "bar" in the head spec')
+    end
+  end
+
   describe "#to_hash patches" do
     it "serialises an external patch" do
       f = formula "foo" do

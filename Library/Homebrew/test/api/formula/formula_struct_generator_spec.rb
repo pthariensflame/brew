@@ -135,6 +135,17 @@ RSpec.describe Homebrew::API::Formula::FormulaStructGenerator do
     ).to eq [[], []]
   end
 
+  it "annotates no_linkage dependencies without duplicating them" do
+    deps_hash = {
+      "dependencies"            => ["foo", "bar"],
+      "test_dependencies"       => ["baz"],
+      "no_linkage_dependencies" => ["bar", "baz"],
+    }
+
+    expect(described_class.process_dependencies_and_requirements(deps_hash, nil, :stable))
+      .to eq [["foo", { "bar" => :no_linkage }, { "baz" => [:test, :no_linkage] }], []]
+  end
+
   describe "::generate_formula_struct_hash" do
     subject(:struct) { described_class.generate_formula_struct_hash(hash) }
 
@@ -159,6 +170,14 @@ RSpec.describe Homebrew::API::Formula::FormulaStructGenerator do
       })
       expect(struct.head_dependencies).not_to be_empty
       expect(struct.head_dependencies).to eq struct.stable_dependencies
+    end
+
+    it "carries no_linkage dependencies into stable and head dependencies" do
+      hash.update({
+        "dependencies"            => ["foo", "bar"],
+        "no_linkage_dependencies" => ["bar"],
+      })
+      expect([struct.stable_dependencies, struct.head_dependencies]).to all(eq(["foo", { "bar" => :no_linkage }]))
     end
 
     it "preserves stable patches" do

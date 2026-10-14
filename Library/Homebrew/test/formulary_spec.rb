@@ -175,6 +175,86 @@ RSpec.describe Formulary do
     end
   end
 
+  describe "dependency metadata round trip" do
+    let(:formula_name) { "no-linkage-round-trip" }
+    let(:formula_content) do
+      <<~RUBY
+        class NoLinkageRoundTrip < Formula
+          desc "Dependency metadata round trip"
+          homepage "https://example.com"
+          license "MIT"
+          url "https://example.com/no-linkage-round-trip-1.0.tar.gz"
+          depends_on "shared" => :no_linkage
+
+          on_macos do
+            depends_on "platform" => :no_linkage
+          end
+          on_linux do
+            depends_on "platform"
+          end
+
+          head do
+            url "https://example.com/no-linkage-round-trip.git", branch: "main"
+            depends_on "head-tool" => [:test, :no_linkage]
+          end
+        end
+      RUBY
+    end
+    let(:mac_tag) { Utils::Bottles::Tag.new(system: :sequoia, arch: :arm) }
+    let(:linux_tag) { Utils::Bottles::Tag.new(system: :linux, arch: :intel) }
+    let(:json) do
+      Homebrew::SimulateSystem.with_tag(mac_tag) do
+        JSON.parse(JSON.generate(described_class.factory(formula_path).to_hash_with_variations))
+      end
+    end
+
+    before do
+      stub_const("OnSystem::VALID_OS_ARCH_TAGS", [mac_tag, linux_tag])
+      allow(CoreTap.instance).to receive(:git_head).and_return("0" * 40)
+      allow(DevelopmentTools).to receive_messages(needs_libc_formula?: false, needs_compiler_formula?: false)
+      formula_path.dirname.mkpath
+      formula_path.write formula_content
+    end
+
+    test_each([:arm64_sequoia, :x86_64_linux].product([:stable, :head],
+                                                      [:public, :internal])) do |(tag_symbol, spec, format)|
+      it "preserves #{spec} declarations through the #{format} API on #{tag_symbol}" do
+        payload = json
+        tag = (tag_symbol == :arm64_sequoia) ? mac_tag : linux_tag
+        Homebrew::SimulateSystem.with_tag(tag) do
+          source = described_class.factory(formula_path, spec)
+          restored = if format == :public
+            described_class::FormulaJSONContentsLoader.new(formula_name, payload).get_formula(spec)
+          else
+            struct = Homebrew::API::Formula::FormulaStructGenerator.generate_formula_struct_hash(payload,
+                                                                                                 bottle_tag: tag)
+            internal_json = JSON.parse(JSON.generate(struct.serialize(bottle_tag: tag)))
+            restored_struct = Homebrew::API::FormulaStruct.deserialize(internal_json, bottle_tag: tag)
+            klass = described_class.load_formula_from_struct!(formula_name, restored_struct,
+                                                              api_source: internal_json, tap_git_head: "",
+                                                              flags: [], internal_api: true)
+            klass.new(formula_name, formula_path, spec)
+          end
+
+          expect(restored.declared_deps.map { |dep| [dep.name, dep.tags] })
+            .to eq(source.declared_deps.map { |dep| [dep.name, dep.tags] })
+        end
+      end
+    end
+
+    it "writes an empty overlay when a variation removes the last no_linkage tag" do
+      formula_path.write(formula_content.sub('depends_on "shared" => :no_linkage', 'depends_on "shared"'))
+
+      expect(json.fetch("variations").fetch("x86_64_linux").fetch("no_linkage_dependencies")).to eq([])
+    end
+
+    it "rejects conflicting declarations in another platform's variation" do
+      formula_path.write(formula_content.sub(/depends_on "platform"$/, 'depends_on "shared"'))
+
+      expect { json }.to raise_error(FormulaSpecificationError, /conflicting :no_linkage declarations for "shared"/)
+    end
+  end
+
   describe "::factory" do
     context "without the API", :no_api do
       before do
@@ -682,6 +762,16 @@ RSpec.describe Formulary do
         }
       end
 
+      let(:no_linkage_variations_json) do
+        {
+          "variations" => {
+            Homebrew::SimulateSystem.current_tag.to_s => {
+              "no_linkage_dependencies" => ["dep"],
+            },
+          },
+        }
+      end
+
       let(:older_macos_variations_json) do
         {
           "variations" => {
@@ -772,6 +862,30 @@ RSpec.describe Formulary do
         expect(formula).to be_a(Formula)
         expect(formula.loaded_from_api?).to be true
         expect(formula.loaded_from_internal_api?).to be true
+      end
+
+      it "returns a Formula with no_linkage dependencies" do
+        allow(Homebrew::API::Formula).to receive(:all_formulae)
+          .and_return formula_json_contents("no_linkage_dependencies" => ["dep"])
+
+        formula = described_class.factory(formula_name)
+        expect(formula.deps.find { |dep| dep.name == "dep" }).to be_no_linkage
+      end
+
+      it "returns a Formula with no_linkage uses_from_macos dependencies" do
+        allow(Homebrew::API::Formula).to receive(:all_formulae)
+          .and_return formula_json_contents("uses_from_macos" => [{ "uses_from_macos_dep" => "no_linkage" }])
+
+        formula = described_class.factory(formula_name)
+        expect(formula.declared_deps.find { |dep| dep.name == "uses_from_macos_dep" }).to be_no_linkage
+      end
+
+      it "returns a Formula with no_linkage dependencies from variations" do
+        allow(Homebrew::API::Formula).to receive(:all_formulae)
+          .and_return formula_json_contents(no_linkage_variations_json)
+
+        formula = described_class.factory(formula_name)
+        expect(formula.deps.find { |dep| dep.name == "dep" }).to be_no_linkage
       end
 
       it "runs post-install steps loaded from the internal API without source Ruby" do
