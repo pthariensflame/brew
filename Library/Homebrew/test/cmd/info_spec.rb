@@ -296,6 +296,19 @@ RSpec.describe Homebrew::Cmd::Info do
       .and not_to_output.to_stderr
   end
 
+  it "shows build dependencies for an uninstalled formula without a bottle" do
+    info = described_class.new([])
+    formula = formula("testball") do
+      T.bind(self, T.class_of(Formula))
+      url "https://brew.sh/testball-0.1.tar.gz"
+      depends_on "builddep" => :build
+    end
+    allow(info).to receive(:github_info).with(formula).and_return("https://example.com/testball.rb")
+
+    expect { info.info_formula(formula) }
+      .to output(/Build \(1\): builddep/).to_stdout
+  end
+
   it "shows a conflict by its resolved full name" do
     info = described_class.new([])
     formula = formula("testball") do

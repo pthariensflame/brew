@@ -247,9 +247,7 @@ module Homebrew
           metadata << pinned
         end
 
-        if !formula.any_version_installed? &&
-           formula_installs_from_source?(formula) &&
-           formula.requirements.none? { |requirement| requirement_for_other_os?(requirement) }
+        if !formula.any_version_installed? && formula_installs_from_source?(formula)
           metadata << "Installs from source: yes"
         end
         metadata
@@ -271,6 +269,7 @@ module Homebrew
 
       sig { params(formula: T.untyped).returns(T::Boolean) }
       def self.formula_installs_from_source?(formula)
+        return false if formula.requirements.any? { |requirement| requirement_for_other_os?(requirement) }
         return true if formula.stable.blank? && formula.head.present?
         return false if formula.stable.blank?
 
@@ -313,8 +312,7 @@ module Homebrew
         end
       end
 
-      private_class_method :formula_metadata_lines, :formatted_time, :pin_path_mtime,
-                           :formula_installs_from_source?
+      private_class_method :formula_metadata_lines, :formatted_time, :pin_path_mtime
 
       sig { params(quiet: T::Boolean).void }
       def print_info(quiet: false)
@@ -559,12 +557,10 @@ module Homebrew
         else
           [].freeze
         end
+        built_from_source = kegs.any? { |keg| !keg.tab.poured_from_bottle }
+        installs_from_source = !installed && self.class.formula_installs_from_source?(formula)
         dependency_lines = %w[build required recommended optional].filter_map do |type|
-          next if type == "build" &&
-                  (kegs.all? { |keg| keg.tab.poured_from_bottle } ||
-                   (kegs.empty? &&
-                    (formula.requirements.any? { |requirement| self.class.requirement_for_other_os?(requirement) } ||
-                     (stable.present? ? stable.bottled? && formula.pour_bottle? : formula.head.blank?))))
+          next if type == "build" && !built_from_source && !installs_from_source
 
           deps = formula.deps.public_send(type).uniq
           next if deps.empty?
