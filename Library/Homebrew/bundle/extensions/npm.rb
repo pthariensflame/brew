@@ -21,6 +21,7 @@ module Homebrew
         def reset!
           @packages = T.let(nil, T.nilable(T::Array[String]))
           @installed_packages = T.let(nil, T.nilable(T::Array[String]))
+          @outdated_packages = T.let(nil, T.nilable(T::Array[String]))
         end
 
         sig { override.returns(T.nilable(String)) }
@@ -36,6 +37,44 @@ module Homebrew
         sig { override.returns(T.nilable(Pathname)) }
         def package_manager_executable
           which("npm", ORIGINAL_PATHS)
+        end
+
+        sig { override.params(name: String, _options: Homebrew::Bundle::EntryOptions).returns(String) }
+        def install_verb(name = "", _options = {})
+          package_installed?(name) ? "Upgrading" : "Installing"
+        end
+
+        sig {
+          override.params(
+            name:       String,
+            with:       T.nilable(T::Array[String]),
+            no_upgrade: T::Boolean,
+            verbose:    T::Boolean,
+            options:    Homebrew::Bundle::EntryOption,
+          ).returns(T::Boolean)
+        }
+        def preinstall!(name, with: nil, no_upgrade: false, verbose: false, **options)
+          return true if !no_upgrade && package_installed?(name, with:) && outdated_packages.include?(name)
+
+          super
+        end
+
+        sig {
+          override.params(
+            name:       String,
+            with:       T.nilable(T::Array[String]),
+            preinstall: T::Boolean,
+            no_upgrade: T::Boolean,
+            verbose:    T::Boolean,
+            force:      T::Boolean,
+            options:    Homebrew::Bundle::EntryOption,
+          ).returns(T::Boolean)
+        }
+        def install!(name, with: nil, preinstall: true, no_upgrade: false, verbose: false, force: false, **options)
+          return super if !preinstall || !package_installed?(name, with:)
+
+          puts "Upgrading #{name} #{package_description}. It is installed but not up-to-date." if verbose
+          install_package!(name, with:, verbose:)
         end
 
         sig { override.params(_name: String, _options: Homebrew::Bundle::EntryOptions).returns(T::Boolean) }
@@ -88,6 +127,20 @@ module Homebrew
           @installed_packages = packages.dup
         end
 
+        sig { returns(T::Array[String]) }
+        def outdated_packages
+          outdated_packages = @outdated_packages
+          return outdated_packages if outdated_packages
+          return [] unless (npm = package_manager_executable)
+
+          @outdated_packages = with_env(package_manager_env(npm)) do
+            JSON.parse(Utils.popen_read_text(npm, "outdated", "-g", "--depth=0", "--json", err: File::NULL))
+                .keys.reject { |name| name == "npm" }
+          end
+        rescue JSON::ParserError
+          @outdated_packages = []
+        end
+
         sig { override.params(name: String, executable: Pathname).void }
         def uninstall_package!(name, executable: Pathname.new(""))
           Bundle.system(executable.to_s, "uninstall", "-g", name, verbose: false)
@@ -104,6 +157,18 @@ module Homebrew
           []
         end
         private :parse_package_list
+      end
+
+      sig { override.params(package: Object, no_upgrade: T::Boolean).returns(String) }
+      def failure_reason(package, no_upgrade:)
+        return super if no_upgrade || !self.class.package_installed?(self.class.dump_name(package))
+
+        "#{self.class.check_label} #{self.class.dump_name(package)} needs to be upgraded."
+      end
+
+      sig { override.params(package: Object, no_upgrade: T::Boolean).returns(T::Boolean) }
+      def installed_and_up_to_date?(package, no_upgrade: false)
+        super && (no_upgrade || self.class.outdated_packages.exclude?(self.class.dump_name(package)))
       end
     end
   end
