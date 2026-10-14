@@ -86,7 +86,10 @@ homepage "https://www.example.com", browsed: "2026-07-26"
 
 This skips automated homepage availability audits for one year. Do not use a future date.
 
-Try to summarise from the [`homepage`](/rubydoc/Formula.html#homepage-class_method) what the formula does in the [`desc`](/rubydoc/Formula.html#desc-class_method). Note that the [`desc`](/rubydoc/Formula.html#desc-class_method) is automatically prepended with the formula name when printed.
+### Fill in the `desc`
+
+Summarise what the formula does in one line in the [`desc`](/rubydoc/Formula.html#desc-class_method), following the [Description Guidelines](Description-Guidelines.md).
+The formula name is automatically prepended to the `desc` when printed, so there is no need to repeat it.
 
 ### Fill in the `license`
 

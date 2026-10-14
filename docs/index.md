@@ -55,6 +55,7 @@ Documentation is grouped below by audience: users, contributors, maintainers and
 - [Acceptable Casks](Acceptable-Casks.md)
 - [Package Acceptance Policy](Package-Acceptance-Policy.md)
 - [Licence Guidelines](Licence-Guidelines.md)
+- [Description Guidelines](Description-Guidelines.md)
 - [Checksum Requirements](Checksum-Requirements.md)
 - [Formulae Versions](Versions.md)
 - [Deprecating, Disabling and Removing](Deprecating-Disabling-and-Removing.md)

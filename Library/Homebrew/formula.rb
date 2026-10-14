@@ -4072,6 +4072,7 @@ class Formula
     # desc "Example formula"
     # ```
     #
+    # @see https://docs.brew.sh/Description-Guidelines Description Guidelines
     # @api public
     sig { params(val: T.nilable(String)).returns(T.nilable(String)) }
     def desc(val = nil)

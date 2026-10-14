@@ -293,6 +293,7 @@ module Cask
     # desc "Open-source code editor"
     # ```
     #
+    # @see https://docs.brew.sh/Description-Guidelines Description Guidelines
     # @api public
     sig { params(description: T.nilable(String)).returns(T.nilable(String)) }
     def desc(description = nil)
