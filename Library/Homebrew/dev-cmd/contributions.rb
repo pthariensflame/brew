@@ -467,12 +467,15 @@ module Homebrew
 
         review_users = github_users.filter_map { |user, github_user| [user, github_user] if github_user }
         review_users.reject! { |user, _| lead_activity_met?(results.fetch(user)) } if skip_reviews_if_lead_met
+        approved_to = Date.iso8601(to).prev_day.iso8601
         review_users.each_with_index do |(user, github_user), index|
           if progress
             $stderr.puts "Querying approved-review search for #{user} (#{index + 1}/#{review_users.length})..."
           end
-          approved_reviews = cached_github_request(Array, "approved", organisation, github_user, from, to, to:) do
-            GitHub.search_approved_pull_requests_in_user_or_organisation(organisation, github_user, from:, to:)
+          approved_reviews = cached_github_request(Array, "approved", organisation, github_user, from, approved_to,
+                                                   to:) do
+            GitHub.search_approved_pull_requests_in_user_or_organisation(organisation, github_user,
+                                                                         from:, to: approved_to)
           end
           capped_reviews = approved_reviews.length >= MAX_PR_SEARCH
           results.fetch(user).fetch(repositories.fetch(0))[:approved_pr_review_hit_cap] = 1 if capped_reviews
@@ -496,9 +499,10 @@ module Homebrew
                     qualifying_total >= MAINTAINER_ACTIVITY_THRESHOLD
 
             $stderr.puts "Querying approved-review search for #{user} in #{repository}..." if progress
-            repository_reviews = cached_github_request(Array, "approved", repository, github_user, from, to, to:) do
+            repository_reviews = cached_github_request(Array, "approved", repository, github_user,
+                                                       from, approved_to, to:) do
               GitHub.search_issues("", is: "pr", review: "approved", repo: repository, reviewed_by: github_user,
-                                   from:, to:)
+                                   from:, to: approved_to)
             end
             repository_counts[:approved_pr_review] = repository_reviews.length
           end
