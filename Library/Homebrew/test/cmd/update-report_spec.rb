@@ -671,6 +671,45 @@ RSpec.describe Homebrew::Cmd::UpdateReport do
       end
     end
 
+    describe "#migrate_tap_migration" do
+      let(:tap) { Tap.fetch("foo", "bar") }
+
+      before do
+        tap.path.mkpath
+        allow(reporter).to receive(:system).and_return(true)
+      end
+
+      after do
+        FileUtils.rm_r(tap.path.parent)
+      end
+
+      it "installs a formula's renamed cask by its full name" do
+        (tap.path/"tap_migrations.json").write '{ "old-formula": "homebrew/cask/new-cask" }'
+        (CoreCaskTap.instance.path/"Casks").mkpath
+        (HOMEBREW_PREFIX/"Caskroom").mkpath
+        (HOMEBREW_CELLAR/"old-formula/1.0").mkpath
+        tab = Tab.empty
+        tab.tabfile = HOMEBREW_CELLAR/"old-formula/1.0/INSTALL_RECEIPT.json"
+        tab.tap = tap
+        tab.write
+        allow(reporter).to receive(:report).and_return({ D: [], DC: [], T: ["foo/bar/old-formula"] })
+
+        expect(reporter).to receive(:system)
+          .with(HOMEBREW_BREW_FILE.to_s, "install", "--cask", "homebrew/cask/new-cask")
+        reporter.migrate_tap_migration
+      end
+
+      it "installs a cask's renamed formula by its full name" do
+        (tap.path/"tap_migrations.json").write '{ "old-cask": "homebrew/core/new-formula" }'
+        (HOMEBREW_PREFIX/"Caskroom/old-cask").mkpath
+        allow(reporter).to receive(:report).and_return({ D: [], DC: ["foo/bar/old-cask"], T: [] })
+
+        expect(reporter).to receive(:system)
+          .with(HOMEBREW_BREW_FILE.to_s, "install", "--overwrite", "homebrew/core/new-formula")
+        reporter.migrate_tap_migration
+      end
+    end
+
     describe "#diff" do
       context "when using the API" do
         subject(:reporter) do

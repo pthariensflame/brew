@@ -229,9 +229,9 @@ class Reporter
 
       migrated_tap_name = Utils.tap_from_full_name(migration_target)
       new_name = if migrated_tap_name
-        new_full_name = Utils.name_from_full_name(migration_target)
+        new_full_name = migration_target
         new_tap_name = migrated_tap_name
-        new_full_name
+        Utils.name_from_full_name(migration_target)
       elsif migration_target.include?("/")
         new_tap_name = migration_target
         new_full_name = "#{new_tap_name}/#{name}"
