@@ -6,6 +6,11 @@ require "bundle/skipper"
 require "bundle/tap"
 
 RSpec.describe Homebrew::Bundle::Tap do
+  # `taps` memoises the stubbed `Tap` doubles, which must not outlive the example.
+  after do
+    described_class.reset!
+  end
+
   describe "dumping" do
     subject(:dumper) { described_class }
 
