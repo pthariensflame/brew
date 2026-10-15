@@ -189,6 +189,11 @@ Sandbox permissions are defined by Homebrew's reviewed code.
 Sandboxing complements maintainer review, download verification and explicit trust decisions; it does not make arbitrary third-party code safe to run.
 The separate trust requirements for taps and vendor-provided casks still apply.
 
+On macOS, Homebrew attempts to disclaim TCC responsibility when launching sandboxed commands for formulae and casks, preventing them from inheriting the launching application's privacy permissions, such as Full Disk Access.
+This supplements the sandbox restrictions and does not revoke permissions granted directly to the worker executable.
+This additional protection uses a private macOS API because there is no documented public equivalent for command-line workers.
+If the API is unavailable or rejects the request, Homebrew warns and continues with the existing sandbox restrictions; the launching application's privacy permissions may then apply.
+
 Available protections depend on the operating system and configuration.
 Some operations can continue with a warning when sandboxing is unavailable or Homebrew relies on an external sandbox.
 

@@ -127,7 +127,7 @@ module OS
 
       sig { params(args: T::Array[T.any(String, ::Pathname)], _tmpdir: String).returns(T::Array[T.any(String, ::Pathname)]) }
       def sandbox_command(args, _tmpdir)
-        [SANDBOX_EXEC, "-p", seatbelt_profile, *args]
+        self.class.ruby_command("utils/disclaim.rb", SANDBOX_EXEC, "-p", seatbelt_profile, *args)
       end
 
       sig { void }
