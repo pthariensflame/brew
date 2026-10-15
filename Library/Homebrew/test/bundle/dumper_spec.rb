@@ -47,6 +47,12 @@ RSpec.describe Homebrew::Bundle::Dumper do
     allow(Tap).to receive(:select).and_return([])
   end
 
+  # `Tap.taps` and `Cask.casks` memoise the stubbed doubles, which must not outlive the example.
+  after do
+    Homebrew::Bundle::Tap.reset!
+    Homebrew::Bundle::Cask.reset!
+  end
+
   it "generates output" do
     expect(dumper.build_brewfile(
              describe: false, no_restart: false, formulae: true, taps: true, casks: true,
