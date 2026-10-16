@@ -1075,18 +1075,19 @@ RSpec.describe Homebrew::Cmd::Info do
       url "https://brew.sh/testball-0.1.tar.gz"
       homepage "https://brew.sh/testball"
       desc "Some test"
+      revision 1
     end
     allow(info).to receive(:github_info).with(formula).and_return("https://example.com/testball.rb")
     allow(formula).to receive_messages(core_formula?: false, outdated?: true)
 
-    keg_path = HOMEBREW_CELLAR/"testball/0.0.1"
+    keg_path = HOMEBREW_CELLAR/"testball/0.1"
     keg_path.mkpath
     tab = Tab.empty
     tab.tabfile = keg_path/AbstractTab::FILENAME
     tab.write
 
     expect { info.info_formula(formula) }
-      .to output(/\A==> testball: 0\.0\.1 → stable 0\.1\n/).to_stdout
+      .to output(/\A==> testball: 0\.1 → stable 0\.1_1\n/).to_stdout
       .and not_to_output.to_stderr
   end
 

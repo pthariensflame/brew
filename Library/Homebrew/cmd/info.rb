@@ -437,8 +437,13 @@ module Homebrew
       def info_formula(formula, shadowed_by: nil)
         specs = T.let([], T::Array[String])
 
+        shadowing_formula = shadowing_installed_formula(formula)
+        kegs = shadowing_formula ? [] : formula.installed_kegs
+        installed = kegs.any?
+        outdated = installed && formula.outdated?
+
         if (stable = formula.stable)
-          string = "stable #{stable.version}"
+          string = "stable #{outdated ? formula.pkg_version : stable.version}"
           string += " (bottled)" if stable.bottled? && formula.pour_bottle?
           specs << string
         end
@@ -448,10 +453,6 @@ module Homebrew
         attrs = []
         attrs << "keg-only" if formula.keg_only?
 
-        shadowing_formula = shadowing_installed_formula(formula)
-        kegs = shadowing_formula ? [] : formula.installed_kegs
-        installed = kegs.any?
-        outdated = installed && formula.outdated?
         missing_libraries, missing_library_deps = formula.missing_library_linkage if installed
         missing_libraries ||= []
         missing_library_deps ||= Set.new
