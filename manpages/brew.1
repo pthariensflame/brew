@@ -2814,6 +2814,16 @@ Note that environment variables must have a value set to be detected\. For examp
 User\-specific environment files take precedence over prefix\-specific files and prefix\-specific files take precedence over system\-wide files (unless \fB$HOMEBREW_SYSTEM_ENV_TAKES_PRIORITY\fP is set, see below)\.
 .P
 Note that these files do not support shell variable expansion (e\.g\. \fB$HOME\fP) or command execution (e\.g\. \fB$(cat file)\fP)\.
+.P
+For MDM configuration, package restrictions and policy ownership, see:
+.P
+.UR https://docs\.brew\.sh/Homebrew\-for\-Mac\-Admins
+Homebrew for Mac Admins
+.UE
+.P
+.UR https://docs\.brew\.sh/Homebrew\-Package\-Policies
+Homebrew Package Policies
+.UE
 .TP
 \fBHOMEBREW_API_AUTO_UPDATE_SECS\fP
 Check Homebrew\[u2019]s API for new formulae or cask data every \fB$HOMEBREW_API_AUTO_UPDATE_SECS\fP seconds\. Alternatively, disable API auto\-update checks entirely with \fB$HOMEBREW_NO_AUTO_UPDATE\fP\&\.
@@ -3360,6 +3370,10 @@ Homebrew Documentation:
 .P
 Homebrew API: 
 .UR https://docs\.brew\.sh/rubydoc/
+.UE
+.P
+.UR https://docs\.brew\.sh/Homebrew\-for\-Teams
+Homebrew for teams at work
 .UE
 .P
 \fBgit\fP(1), \fBgit\-log\fP(1)

@@ -1,12 +1,12 @@
 ---
-last_review_date: "2026-09-21"
+last_review_date: "2026-10-25"
 description: Deploy and manage Homebrew with MDM, non-admin accounts and central configuration.
 ---
 
 # Homebrew for Mac Admins: MDM and Non-Admin Accounts
 
 This guide covers provisioning Homebrew through MDM and running it as a standard account or a dedicated Homebrew account.
-It also covers central configuration, software restrictions and unattended maintenance with tools such as Jamf and Munki.
+For dashboard setup, follow the [Jamf Pro](Homebrew-and-Jamf-Pro.md), [Iru (formerly Kandji)](Homebrew-and-Iru.md), [Microsoft Intune](Homebrew-and-Microsoft-Intune.md) or [other provider instructions](Homebrew-Fleet-Management.md#other-management-systems).
 The examples use the Apple Silicon prefix `/opt/homebrew`; see [Installation](Installation.md) for platform requirements.
 
 ## Choose the managing account
@@ -25,11 +25,102 @@ Homebrew provides no security guarantees for installations where users with writ
 
 ## Initial provisioning
 
-Create the managing account and its home directory before installing Homebrew.
-For MDM deployment, we recommend the [official macOS `.pkg` installer and its `HOMEBREW_PKG_USER` setting](Installation.md#installation).
-The selected account must exist before installation; this also supports installation at the login window.
-Use the `.pkg` installer if sudo is unavailable on the host.
-On Apple Silicon, casks and bottles can be installed without developer tools; install them when you need to build formulae from source.
+The following example provisions a new Apple Silicon Mac for a dedicated standard account named `brewadmin`.
+For a user-owned installation, substitute the existing user's short name and home directory throughout.
+Run preparation commands as root through your management system; do not change the ownership of an existing installation without reviewing its packages and services first.
+
+1. Create the account through your organisation's account-provisioning workflow before assigning the Homebrew package.
+   For a local pilot, an administrator can use **System Settings > Users & Groups > Add User**.
+   Use these example values, with a unique password supplied through your normal credential-management system:
+
+   | Setting      | Example value          |
+   | ------------ | ---------------------- |
+   | Account type | Standard               |
+   | Full name    | Homebrew Management    |
+   | Short name   | `brewadmin`            |
+   | Home         | `/Users/brewadmin`     |
+   | Login shell  | `/bin/zsh`             |
+
+   Do not embed a shared password in a deployment script or job log.
+   The account needs no administrator privileges, sudo access or interactive login session.
+2. Verify the account exists and its configured home is correct, then create that directory if your provisioning workflow has not already done so:
+
+   ```bash
+   /usr/bin/id brewadmin
+   /usr/bin/dscl . -read /Users/brewadmin NFSHomeDirectory UserShell
+   /usr/bin/install -d -o brewadmin -g "$(/usr/bin/id -gn brewadmin)" \
+     -m 0750 /Users/brewadmin
+   /usr/bin/sudo -H -u brewadmin /bin/test -w /Users/brewadmin
+   ```
+
+   Expect `NFSHomeDirectory: /Users/brewadmin` and a successful writable-directory check.
+   Stop deployment if either check fails; a directory alone does not create an account.
+3. Select that account for the installer, then set the required ownership, mode and ACL state:
+
+   ```sh
+   /usr/bin/defaults write /var/tmp/.homebrew_pkg_user HOMEBREW_PKG_USER brewadmin
+   /usr/sbin/chown root:wheel /var/tmp/.homebrew_pkg_user.plist
+   /bin/chmod 600 /var/tmp/.homebrew_pkg_user.plist
+   /bin/chmod -N /var/tmp/.homebrew_pkg_user.plist
+   /usr/bin/defaults read /var/tmp/.homebrew_pkg_user HOMEBREW_PKG_USER
+   /bin/ls -le /var/tmp/.homebrew_pkg_user.plist
+   ```
+
+   Expect `brewadmin`, owner `root`, group `wheel` and permissions `-rw-------` without a `+` or ACL entries.
+   The file must be a regular file, not a symbolic link.
+   The [installer configuration requirements](Installation.md#installation) explain validation and fallback behaviour: an invalid file can select the console user instead.
+4. Download the official `.pkg` from [Homebrew's releases](https://github.com/Homebrew/brew/releases/latest), approve that version and upload it to your management system's package delivery workflow.
+   Assign it only after steps 1–3 have succeeded.
+   For a local pilot with the approved package saved as `/Library/Management/Homebrew/Homebrew.pkg`, run:
+
+   ```sh
+   /usr/sbin/installer -pkg /Library/Management/Homebrew/Homebrew.pkg -target /
+   ```
+
+   The selected account can own the installation at the login window; nobody needs to be logged in.
+   The package does not require an existing Git installation for basic bottle and cask use.
+   [Install Git for management jobs](#install-git-for-management-jobs) before running the baseline or updates; developer tools are also needed when building formulae from source.
+5. Verify the prefix owner, then use [`as-brew-user`](#run-management-commands-as-the-owner) to run Homebrew as that account with its home and environment:
+
+   ```sh
+   /usr/bin/stat -f '%Su' /opt/homebrew
+   /opt/homebrew/bin/brew as-brew-user --version
+   /opt/homebrew/bin/brew as-brew-user config
+   ```
+
+   Expect `brewadmin` as owner and a successful Homebrew version report.
+   Retain the installer output and these checks before expanding the deployment.
+   Continue with [central configuration](#set-central-configuration-with-brewenv) and a [team Brewfile](Homebrew-Fleet-Management.md#install-default-software-for-each-team).
+
+### Install Git for management jobs
+
+Install Apple's Command Line Tools (CLT) to provide Git before running `brew update`, baseline jobs or the shell installer.
+A working Git from an existing Xcode installation also suffices.
+The presence of `/usr/bin/git` alone is insufficient: without developer tools, it can be a macOS installation prompt stub that Homebrew deliberately avoids.
+
+1. Choose an installation method:
+   - **Interactive setup:** run `/usr/bin/xcode-select --install` in Terminal, accept the dialogue and wait for installation to finish.
+     This selects a compatible release without maintaining a package, but requires user interaction and does not let you choose a specific version.
+   - **Unattended MDM deployment:** sign in to [Apple Developer downloads](https://developer.apple.com/download/all/?q=command%20line%20tools), download an approved CLT release compatible with the target macOS and mount its disk image to obtain the `.pkg`.
+     Deploy that package through your MDM as root.
+     This supports deployment without a logged-in user and staged rollout of a tested version, but you must maintain the package and its macOS compatibility.
+2. For a local package test, save the approved installer as `/Library/Management/Homebrew/CommandLineTools.pkg` and run as root:
+
+   ```sh
+   /usr/sbin/installer -pkg /Library/Management/Homebrew/CommandLineTools.pkg -target /
+   ```
+
+3. After either installation method, verify the selected developer directory and execute Git:
+
+   ```sh
+   /usr/bin/xcode-select --print-path
+   /usr/bin/xcrun git --version
+   ```
+
+   Require successful verification before assigning Homebrew jobs.
+   Recheck compatibility after macOS upgrades and keep CLT updated through Software Update or your managed package workflow; see [Apple's installation and update instructions](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/).
+
+### Alternative shell installer
 
 Alternatively, an MDM agent running as root can use the shell installer to provision Homebrew for an existing standard account.
 The shell installer requires an existing usable Git; use the `.pkg` installer on hosts without one.
@@ -55,13 +146,26 @@ Use the installer's printed `brew shellenv` instructions for interactive shells 
 
 ## Run management commands as the owner
 
-When your process already runs as the managing account, invoke `brew` normally.
-A management agent running as root can select the prefix owner explicitly:
+Management agents normally execute scripts as root, but Homebrew package operations must run as the non-root account that owns the prefix.
+`as-brew-user` selects that owner, switches accounts when necessary and supplies its home directory and a clean environment.
+It also works when the caller is already the owner, so the management examples use it consistently.
+An unrelated standard account still needs permission to switch users.
 
-```sh
-/opt/homebrew/bin/brew as-brew-user install --yes wget
-/opt/homebrew/bin/brew as-brew-user update
-```
+A root job executes the Homebrew launcher before switching accounts, so only use this workflow when the prefix owner is trusted with that execution.
+Use a dedicated managing account when end users must not control code run by the root job.
+
+1. Use the absolute path `/opt/homebrew/bin/brew` on Apple Silicon: a management job may not have Homebrew on `PATH`.
+2. Put `as-brew-user` before the Homebrew command and its arguments.
+   For example, refresh metadata, then install an approved tool without interactive prompts:
+
+   ```sh
+   /opt/homebrew/bin/brew as-brew-user update
+   /opt/homebrew/bin/brew as-brew-user install --yes wget
+   ```
+
+3. Retain standard output, standard error and the exit status in the management job.
+   Extra account-switching diagnostics go to standard error; JSON remains on standard output.
+   Shell redirection such as `> report.json` runs as the calling account, so a root job can save reports outside the managing account's home.
 
 `as-brew-user` works without an active console login and rejects a root-owned prefix.
 It uses the owner's home directory and a clean environment.
@@ -84,118 +188,19 @@ Use those files for persistent management settings; exporting a variable in the 
 
 ## Set central configuration with `brew.env`
 
-Homebrew reads environment files in this order:
-
-| Scope  | Location                                                                                   |
-| ------ | ------------------------------------------------------------------------------------------ |
-| System | `/etc/homebrew/brew.env`                                                                   |
-| Prefix | `/opt/homebrew/etc/homebrew/brew.env`                                                      |
-| User   | `~/.homebrew/brew.env`, or the `homebrew/brew.env` file under the configured XDG directory |
-
-Later files override earlier files.
-Set `HOMEBREW_SYSTEM_ENV_TAKES_PRIORITY=1` in `/etc/homebrew/brew.env` to load that file again last, overriding conflicting prefix and user settings.
-The user file is resolved using the selected account's home and configuration directory.
-See the [environment reference](Manpage.md#environment) for XDG configuration and all available variables.
-
-For example, deploy this file as `/etc/homebrew/brew.env`:
-
-```text
-HOMEBREW_SYSTEM_ENV_TAKES_PRIORITY=1
-HOMEBREW_FORBIDDEN_OWNER=IT support
-HOMEBREW_FORBIDDEN_OWNER_CONTACT=https://support.example.com/homebrew
-```
-
-Write literal `NAME=value` lines, without `export` or surrounding shell quotes.
-Values can contain spaces, but shell expansion and command substitution are not supported: `$HOME` and `$(id -gn)` would remain literal text.
-Use `1` to enable a setting and omit it when it is not wanted.
-Some booleans test whether a value is set, so `0` is not a general way to disable them.
-
-Manage the system file and its directory as root, readable by the managing account and writable only by administrators.
-For example, deploy a prepared file with:
-
-```sh
-/usr/bin/install -d -o root -g wheel -m 0755 /etc/homebrew
-/usr/bin/install -o root -g wheel -m 0644 /path/to/brew.env /etc/homebrew/brew.env
-```
-
-Prefix and user files are useful for account-specific defaults.
-The prefix owner can normally modify prefix configuration, so use the system file for centrally maintained settings.
-These settings control Homebrew behaviour; they do not prevent the owner from modifying Homebrew itself or executing software outside it.
+Follow the [central configuration steps](Homebrew-Package-Policies.md#set-central-configuration-with-brewenv) to deploy `/etc/homebrew/brew.env` and verify settings as the managing account.
+The same configuration format supports Macs and Linux systems; system settings can take priority over prefix and user defaults.
 
 ## Restrict software and package sources
 
-Choose restrictions that match your deployment rather than enabling every setting.
-Lists below are space-separated values in `brew.env`.
-
-| Variable                              | Behaviour                                                                |
-| ------------------------------------- | ------------------------------------------------------------------------ |
-| `HOMEBREW_FORBID_PACKAGES_FROM_PATHS` | Refuses formulae and casks supplied through file paths.                  |
-| `HOMEBREW_FORBIDDEN_FORMULAE`         | Refuses listed formulae, including when required as dependencies.        |
-| `HOMEBREW_FORBIDDEN_CASKS`            | Refuses listed casks, including when required as dependencies.           |
-| `HOMEBREW_FORBIDDEN_TAPS`             | Refuses installation from listed taps, including dependencies.           |
-| `HOMEBREW_FORBIDDEN_LICENSES`         | Refuses formulae with listed SPDX licences, including dependencies.      |
-| `HOMEBREW_FORBIDDEN_OWNER`            | Names the person or team responsible for restrictions in error messages. |
-| `HOMEBREW_FORBIDDEN_OWNER_CONTACT`    | Adds contact information to restriction messages.                        |
-
-For tap restrictions, a `user/repository` entry matches its default GitHub remote; use the remote URL for a custom remote.
-Restrictions do not remove software that is already installed.
-
-Use [tap trust](Tap-Trust.md) to explicitly trust required third-party formulae, casks or commands.
-Trusting an entire tap allows its current and future contents to run as the managing account.
-Tap trust and the restriction variables have different purposes; neither is a substitute for operating-system application controls.
+Use [package policies](Homebrew-Package-Policies.md) to restrict packages, taps, local definitions and formula licences, with a named contact for exceptions.
+The guide explains tap trust, group policy conflicts and the limits of controls enforced by the package manager.
 
 ## Manage software and updates
 
-A centrally maintained [Brewfile](Brew-Bundle-and-Brewfile.md) can describe the software to install:
-
-```sh
-/opt/homebrew/bin/brew as-brew-user bundle install --file=/Library/Management/Homebrew/Brewfile
-```
-
-Make the Brewfile readable by the managing account and writable by its maintainers.
-Installing a Brewfile does not automatically remove packages omitted from it; review `brew bundle cleanup` before using its removal options.
-Run management jobs serially and collect both their output and exit status.
-If logging through a shell pipeline, enable `pipefail` so a successful logger does not hide a failed Homebrew command.
-
-Homebrew's automatic updates refresh Homebrew and package metadata; `brew upgrade` upgrades installed software.
-If you set `HOMEBREW_NO_AUTO_UPDATE=1`, schedule explicit `brew update` runs to keep metadata current.
-`HOMEBREW_NO_INSTALL_UPGRADE=1` prevents `brew install` from upgrading an already-installed package, while `HOMEBREW_NO_INSTALL_CLEANUP=1` allows you to schedule cleanup separately.
-Disabling these automatic actions creates maintenance work for your management workflow.
-
-For a minimum-version policy on an installed package, use your approved version threshold, for example:
-
-```sh
-/opt/homebrew/bin/brew as-brew-user upgrade --yes --minimum-version=2.50.1 git
-```
-
-The threshold decides whether an upgrade is needed; it does not pin the package to that exact version.
-Account for uninstalled or pinned packages in your management workflow and check the resulting installed version.
-Use the [command reference](Manpage.md) to check options available in the Homebrew version deployed to your Macs.
-
-### Vulnerability updates
-
-Run `brew vulns` without formula names to check all installed formulae for known vulnerabilities:
-
-```sh
-/opt/homebrew/bin/brew as-brew-user update
-/opt/homebrew/bin/brew as-brew-user vulns --list-skipped
-```
-
-The scan returns a non-zero status when it finds unresolved vulnerabilities or cannot reliably scan some installed formulae.
-Keep its output and exit status; review skipped packages as well as findings.
-Casks are not scanned.
-Use `--json` for management reports, `--severity=high` to focus on high and critical findings or `--fix-available` to show findings with a released fix.
-
-To apply available upgrades across the installation, including vulnerable formulae, then check again:
-
-```sh
-/opt/homebrew/bin/brew as-brew-user upgrade --yes
-/opt/homebrew/bin/brew as-brew-user vulns --list-skipped
-```
-
-For selective remediation, pass the affected formula names from the scan to `brew upgrade --yes --formula`.
-Pinned formulae and vulnerabilities without a fix in the available Homebrew version need separate review.
-An upstream fix reported by `--fix-available` does not guarantee that Homebrew already provides it.
+Keep [shared team Brewfiles](Homebrew-for-Teams.md) in version control, then use the [fleet deployment and maintenance jobs](Homebrew-Fleet-Management.md) for installation, self-service and staged updates.
+For security work, follow [vulnerability scanning and verified remediation](Homebrew-Vulnerability-Management.md), including `--vulnerable` and `--minimum-version` selection.
+Serialise jobs on each prefix and retain their output and exit status; a successful upgrade alone does not verify remediation.
 
 ## Casks, services and shared destinations
 
@@ -210,25 +215,27 @@ In `brew.env`, specify the destination as an absolute path to that account's App
 A shared destination such as `/Applications` needs suitable permissions provisioned separately.
 For casks that must supply checksums, `HOMEBREW_CASK_OPTS=--require-sha` rejects casks without them.
 
+Use `brew outdated --cask --greedy` to assess self-updating casks and those using `version :latest`.
+The Homebrew installation record can differ from an application's running version after it updates itself.
+
 Caches, logs, configuration and user services belong to the managing account.
 A dedicated account's user service is not another user's service; plan its login requirements and lifecycle separately from package installation.
 Use the [`brew services` reference](Manpage.md#services-subcommand) when choosing user services or system services.
 
 ## Network configuration and reporting
 
-For managed download infrastructure, see `HOMEBREW_API_DOMAIN`, `HOMEBREW_BOTTLE_DOMAIN` and `HOMEBREW_ARTIFACT_DOMAIN` in the [environment reference](Manpage.md#environment).
-API and bottle mirrors can fall back to upstream sources.
-`HOMEBREW_ARTIFACT_DOMAIN_NO_FALLBACK=1`, together with `HOMEBREW_ARTIFACT_DOMAIN`, makes artifact-mirror failures stop downloads instead of falling back.
-Validate your mirror's coverage and keep its metadata current.
-Use `HOMEBREW_NO_ANALYTICS=1` if your deployment should disable Homebrew analytics.
+Follow the [mirror and network guidance](Homebrew-Package-Policies.md#use-mirrors-without-weakening-verification) and [private-tap authentication steps](Homebrew-Fleet-Management.md#publish-internal-tools-through-private-taps) when preparing unattended jobs.
+Use the [inventory and SBOM guide](Homebrew-Inventory-and-SBOM.md) for reports and audit evidence, and your MDM's [administrator roles](Homebrew-Fleet-Management.md#reporting-and-administrator-access) for access control.
+For build failures, retain diagnostics from the managing account's `~/Library/Logs/Homebrew` directory.
 
-Collect inventory as the managing account:
+## Apply operating-system execution rules
 
-```sh
-/opt/homebrew/bin/brew as-brew-user info --json=v2 --installed
-/opt/homebrew/bin/brew as-brew-user config
-/opt/homebrew/bin/brew as-brew-user doctor
-```
+Homebrew package restrictions govern Homebrew operations; they do not prevent execution of a binary downloaded by another tool.
+If you enforce execution rules through your MDM, account for Homebrew's shell scripts, portable Ruby, build tools and the software being installed.
+Allowing an interpreter does not by itself restrict the scripts it can execute.
 
-Use JSON output for inventory integrations and [Querying `brew`](Querying-Brew.md) for examples.
-Keep failure output and consult the managing account's `~/Library/Logs/Homebrew` directory when investigating build failures.
+On supported supervised Macs, Apple's [`com.apple.configuration.app.settings` declaration](https://github.com/apple/device-management/blob/release/declarative/declarations/configurations/app.settings.yaml) provides `AllowedBinaries` and `DeniedBinaries` from macOS 27.
+Confirm support in your MDM before using it.
+Apple requires a code directory hash or Team ID for an allowed binary; a path prefix alone is insufficient.
+Inspect the actual installed executable with `codesign -dvvv /path/to/binary`, then maintain the rule as software changes.
+Do not assume all Homebrew packages share a signing identity, and do not broadly trust a user-writable prefix as a substitute for reviewing executable code.

@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-09-21"
+last_review_date: "2026-10-25"
 ---
 
 Start with [installation](Installation.md),
@@ -7,14 +7,13 @@ Start with [installation](Installation.md),
 [troubleshooting](Troubleshooting.md) and
 [FAQ (Frequently Asked Questions)](FAQ.md) guides if you are new to Homebrew.
 
-Documentation is grouped below by audience: users, contributors, maintainers and those interested in Homebrew's governance.
+Documentation is grouped below by audience: users, system administrators, contributors, maintainers and those interested in Homebrew's governance.
 
 ## Users
 
 - [`brew` manual page (command documentation, also available with `man brew`)](Manpage.md)
 - [Homebrew Blog (news on major updates)](https://brew.sh/blog/)
 - [Installation](Installation.md)
-- [Homebrew for Mac Admins: MDM and Non-Admin Accounts](Homebrew-for-Mac-Admins.md)
 - [Support Tiers](Support-Tiers.md)
 - [Troubleshooting](Troubleshooting.md)
 - [FAQ (Frequently Asked Questions)](FAQ.md)
@@ -43,6 +42,25 @@ Documentation is grouped below by audience: users, contributors, maintainers and
 - [Creating a Homebrew Issue](Creating-a-Homebrew-Issue.md)
 - [Updating Software in Homebrew](Updating-Software-in-Homebrew.md)
 - [Adding Software to Homebrew](Adding-Software-to-Homebrew.md)
+
+## Teams
+
+- [Homebrew for teams at work: shared Brewfiles](Homebrew-for-Teams.md)
+
+## System administrators
+
+- [Homebrew Software Inventory, SBOMs and Audit Reporting](Homebrew-Inventory-and-SBOM.md)
+- [Homebrew Vulnerability Scanning and Patch Management](Homebrew-Vulnerability-Management.md)
+- [Homebrew Package Policies and Supply Chain Protection](Homebrew-Package-Policies.md)
+
+## Mac Admins
+
+- [Homebrew for Mac Admins: MDM and Non-Admin Accounts](Homebrew-for-Mac-Admins.md)
+- [Homebrew Fleet Management with MDM and Brewfiles](Homebrew-Fleet-Management.md)
+- [Jamf Pro](Homebrew-and-Jamf-Pro.md)
+- [Iru (formerly Kandji)](Homebrew-and-Iru.md)
+- [Microsoft Intune](Homebrew-and-Microsoft-Intune.md)
+- [Other MDMs](Homebrew-Fleet-Management.md#other-management-systems)
 
 ## Contributors
 

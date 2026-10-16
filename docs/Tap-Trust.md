@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-07-18"
+last_review_date: "2026-10-25"
 ---
 
 # Tap Trust
@@ -12,6 +12,9 @@ Non-official taps require explicit trust by default [since Homebrew 6.0.0](https
 
 `brew doctor` warns about non-official taps for which neither the tap nor any individual item is trusted.
 Commands that need to load an untrusted tap or item will fail until the relevant trust is granted.
+
+For centrally managed devices, combine trust decisions with [package policies and approvals](Homebrew-Package-Policies.md#separate-tap-trust-from-package-approval).
+Use [inventory and scan coverage](Homebrew-Vulnerability-Management.md#capture-findings-without-losing-errors) to identify installations omitted because their taps are untrusted.
 
 ## Why tap trust exists
 

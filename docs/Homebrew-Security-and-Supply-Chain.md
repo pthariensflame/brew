@@ -2,7 +2,7 @@
 description: Homebrew security and supply chain defences, including formula and Cask trust models, checksums, signed metadata, bottles, Gatekeeper, sandboxing and tap trust.
 redirect_from:
   - /Supply-Chain-Security
-last_review_date: "2026-09-19"
+last_review_date: "2026-10-25"
 ---
 
 # Homebrew Security and Supply Chain
@@ -13,6 +13,8 @@ This Homebrew security guide explains the recent supply-chain security incidents
 
 * Table of Contents
 {:toc}
+
+For operational guidance, see [vulnerability scanning and patch management](Homebrew-Vulnerability-Management.md), [package policies](Homebrew-Package-Policies.md) and [inventory and SBOM reporting](Homebrew-Inventory-and-SBOM.md).
 
 ## Recent incidents in other ecosystems
 

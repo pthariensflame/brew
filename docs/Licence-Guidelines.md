@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-07-18"
+last_review_date: "2026-10-25"
 redirect_from:
   - /License-Guidelines
 ---
@@ -7,6 +7,9 @@ redirect_from:
 # Licence Guidelines
 
 Formulae in `homebrew/core` must use a licence compatible with the [Debian Free Software Guidelines](https://wiki.debian.org/DFSGLicenses) or be released into the public domain under the [DFSG public-domain guidance](https://wiki.debian.org/DFSGLicenses#Public_Domain).
+
+These guidelines describe the licences of packaged software.
+See [package licence policies](Homebrew-Package-Policies.md#choose-the-restriction-that-matches-the-requirement) for organisational restrictions.
 
 ## Specifying a licence
 
