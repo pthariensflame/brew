@@ -135,7 +135,11 @@ RSpec.describe Homebrew::Cmd::Vulns do
       expect { described_class.new(["--json"]).run }.to output(<<~JSON).to_stdout
         {
           "findings": [],
-          "skipped_formulae": []
+          "skipped_formulae": [],
+          "checked": 1,
+          "complete": true,
+          "outdated_without_sbom": [],
+          "unscanned_formulae": {}
         }
       JSON
     end
@@ -149,7 +153,13 @@ RSpec.describe Homebrew::Cmd::Vulns do
       expected_json = <<~JSON
         {
           "findings": [],
-          "skipped_formulae": []
+          "skipped_formulae": [],
+          "checked": 1,
+          "complete": false,
+          "outdated_without_sbom": [
+            "openssl@3"
+          ],
+          "unscanned_formulae": {}
         }
       JSON
 
@@ -242,6 +252,22 @@ RSpec.describe Homebrew::Cmd::Vulns do
       described_class.new(["--list-skipped"]).run
     end
 
+    it "reports unresolved installed formulae as incomplete in JSON and fails" do
+      cmd = described_class.new(["--json"])
+      allow(cmd).to receive(:formulae).and_call_original
+      allow(Formula).to receive(:racks).and_return([HOMEBREW_CELLAR/"missing"])
+      allow(Formulary).to receive(:from_rack).and_raise(FormulaUnavailableError, "missing")
+      stub_scan([])
+      out = StringIO.new
+      allow($stdout).to receive(:puts) { |text| out.puts(text) }
+      allow($stderr).to receive(:write)
+      cmd.run
+
+      expect([JSON.parse(out.string), Homebrew.failed?]).to match([
+        hash_including("complete" => false, "unscanned_formulae" => { "missing" => "resolution_error" }), true
+      ])
+    end
+
     context "with an installed keg from an untrusted tap" do
       let(:trusted_rack) { HOMEBREW_CELLAR/"act" }
       let(:untrusted_rack) { HOMEBREW_CELLAR/"foo" }
@@ -255,6 +281,17 @@ RSpec.describe Homebrew::Cmd::Vulns do
           "Refusing to load formula someone/tap/foo from untrusted tap someone/tap.",
         )
         stub_scan([])
+      end
+
+      it "includes untrusted formulae in JSON coverage" do
+        out = StringIO.new
+        allow($stdout).to receive(:puts) { |text| out.puts(text) }
+        allow($stderr).to receive(:write)
+        described_class.new(["--json"]).run
+
+        expect(JSON.parse(out.string)).to include(
+          "complete" => false, "unscanned_formulae" => { "foo" => "untrusted_tap" },
+        )
       end
 
       it "does not pass the untrusted formula to the scanner" do

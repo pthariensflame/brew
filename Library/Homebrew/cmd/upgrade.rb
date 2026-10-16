@@ -67,6 +67,14 @@ module Homebrew
         flag   "--minimum-version=", "--min-version=",
                description: "Only upgrade a named formula or cask with an installed version below the given " \
                             "minimum version."
+        switch "--vulnerable",
+               description: "Only select outdated formulae with open vulnerabilities from OSV.dev. " \
+                            "Stop if any candidate cannot be reliably scanned. Implies `--formula`; " \
+                            "dependencies and dependants may also be upgraded. " \
+                            "The available version is not guaranteed to fix every finding."
+        flag   "--severity=",
+               depends_on:  "--vulnerable",
+               description: "Only select findings at or above `low`, `medium`, `high` or `critical`."
         switch "--no-ask", "--yes", "-y",
                description: "Do not ask for confirmation before downloading and upgrading. Ask mode is the default.",
                env:         :no_ask
@@ -159,6 +167,7 @@ module Homebrew
 
         conflicts "--build-from-source", "--force-bottle"
         conflicts "--ask", "--no-ask"
+        conflicts "--vulnerable", "--cask"
 
         named_args [:installed_formula, :installed_cask]
       end
@@ -215,6 +224,18 @@ module Homebrew
               casks << item
             end
           end
+        end
+
+        if args.vulnerable?
+          require "vulns"
+          raise UsageError, "`--vulnerable` only supports formulae." if casks.present?
+          raise unavailable_errors.fetch(0) if unavailable_errors.present?
+
+          formulae = Homebrew::Vulns.select_vulnerable(
+            (formulae.presence || Formula.installed).select { |formula| formula_outdated?(formula) },
+            severity: args.severity,
+          )
+          return if formulae.empty?
         end
 
         # If one or more formulae are specified, but no casks were

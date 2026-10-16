@@ -13,13 +13,18 @@ module Homebrew
         usage_banner <<~EOS
           `as-console-user` <command> [<args> ...]
 
-          Run a Homebrew command as the active macOS console user.
+          Run a Homebrew command as the user logged in to the macOS desktop.
 
-          This is intended for MDM, Munki and Jamf workflows where `brew` is
-          invoked as root but Homebrew operations should run as the logged-in
-          console user. Uses their home and a clean environment, dispatching
-          through `HOMEBREW_BREW_FILE`. Use `as-brew-user` to select the prefix owner.
-          When `sudo` is disabled or unavailable, root can switch users directly.
+          Use this from administrative scripts when the desktop user manages
+          Homebrew, for example `brew as-console-user install --yes` <formula>.
+          Fails if no supported desktop user is logged in.
+
+          Uses the user's home and a clean environment, then loads `brew.env` for
+          that account. Uses `sudo` when enabled and available; root can also switch
+          users when `sudo` is disabled or unavailable.
+
+          Use `as-brew-user` to select the installation's owner on macOS or Linux,
+          including when no user is logged in.
         EOS
 
         named_args min: 1

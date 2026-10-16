@@ -167,7 +167,7 @@ __brew_internal_commands() {
     'alias:Show an alias'\''s command'
     'analytics:Control Homebrew'\''s anonymous aggregate user behaviour analytics'
     'as-brew-user:Run a Homebrew command as the owner of `HOMEBREW_PREFIX` on macOS or Linux'
-    'as-console-user:Run a Homebrew command as the active macOS console user'
+    'as-console-user:Run a Homebrew command as the user logged in to the macOS desktop'
     'audit:Check formula or cask for Homebrew coding style violations'
     'autoremove:Uninstall formulae that were only installed as a dependency of another formula and are now no longer needed'
     'benchmark:Benchmark this `brew` with `hyperfine`, installing `hyperfine` first if it is missing'
@@ -1998,12 +1998,14 @@ _brew_outdated() {
     '(--quiet --verbose)--json[Print output in JSON format. There are two versions: `v1` and `v2`. `v1` is deprecated and is currently the default if no version is specified. `v2` prints outdated formulae and casks]' \
     '--minimum-version[Only list a named formula or cask with an installed version below the given minimum version]' \
     '(--verbose --json)--quiet[List only the names of outdated kegs (takes precedence over `--verbose`)]' \
+    '--severity[Only select findings at or above `low`, `medium`, `high` or `critical`]' \
     '(--quiet --json)--verbose[Include detailed version information]' \
+    '(--cask)--vulnerable[Only list outdated formulae with open vulnerabilities from OSV.dev. Stop if any candidate cannot be reliably scanned. Implies `--formula`]' \
     - formula \
     '(--cask)--formula[List only outdated formulae]' \
     '*:formula:__brew_formulae' \
     - cask \
-    '(--formula)--cask[List only outdated casks]' \
+    '(--formula --vulnerable)--cask[List only outdated casks]' \
     '*:cask:__brew_casks'
 }
 
@@ -2953,15 +2955,17 @@ _brew_upgrade() {
     '(--formula)--require-sha[Require all casks to have a checksum]' \
     '(--formula)--screen-saverdir[Target location for Screen Savers (default: `~/Library/Screen Savers`)]' \
     '(--formula)--servicedir[Target location for Services (default: `~/Library/Services`)]' \
+    '--severity[Only select findings at or above `low`, `medium`, `high` or `critical`]' \
     '(--formula)--skip-cask-deps[Skip installing cask dependencies]' \
     '--verbose[Print the verification and post-install steps]' \
     '(--formula)--vst-plugindir[Target location for VST Plugins (default: `~/Library/Audio/Plug-Ins/VST`)]' \
     '(--formula)--vst3-plugindir[Target location for VST3 Plugins (default: `~/Library/Audio/Plug-Ins/VST3`)]' \
+    '(--cask)--vulnerable[Only select outdated formulae with open vulnerabilities from OSV.dev. Stop if any candidate cannot be reliably scanned. Implies `--formula`; dependencies and dependants may also be upgraded. The available version is not guaranteed to fix every finding]' \
     - installed_formula \
     '(--casks --skip-cask-deps --no-quit --greedy --greedy-latest --greedy-auto-updates --binaries --require-sha --appdir --appimagedir --keyboard-layoutdir --colorpickerdir --prefpanedir --qlplugindir --mdimporterdir --dictionarydir --fontdir --servicedir --input-methoddir --internet-plugindir --audio-unit-plugindir --vst-plugindir --vst3-plugindir --screen-saverdir --language)--formula[Treat all named arguments as formulae. If no named arguments are specified, upgrade only outdated formulae]' \
     '*:installed_formula:__brew_installed_formulae' \
     - installed_cask \
-    '(--formulae --build-from-source --interactive --force-bottle --fetch-HEAD --keep-tmp --debug-symbols --overwrite)--cask[Treat all named arguments as casks. If no named arguments are specified, upgrade only outdated casks]' \
+    '(--formulae --build-from-source --interactive --force-bottle --fetch-HEAD --keep-tmp --debug-symbols --overwrite --vulnerable)--cask[Treat all named arguments as casks. If no named arguments are specified, upgrade only outdated casks]' \
     '*:installed_cask:__brew_installed_casks'
 }
 
@@ -3043,7 +3047,7 @@ _brew_vulns() {
     '(--no-fix-available --fix-type)--fix-available[Only report vulnerabilities that have a released version fix available. Shortcut for `--fix-type=released`]' \
     '(--fix-available --no-fix-available)--fix-type[Filter findings by fix type: `released` (official version release), `patch` (unreleased commit SHA), `any` (either), `none` (neither), `unreleased` (no released version fix)]' \
     '--help[Show this message]' \
-    '--json[Output JSON]' \
+    '--json[Output findings and scan coverage as JSON. A complete scan does not guarantee the absence of vulnerabilities]' \
     '--list-skipped[List packages skipped due to missing or unsupported source URL]' \
     '--max-summary[Truncate summaries to n characters (default 60, 0 for no limit)]' \
     '(--fix-available --fix-type)--no-fix-available[Only report vulnerabilities that do not have a released version fix available (includes unreleased commit SHA patches). Shortcut for `--fix-type=unreleased`]' \

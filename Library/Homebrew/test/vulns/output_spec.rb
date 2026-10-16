@@ -140,7 +140,10 @@ RSpec.describe Homebrew::Vulns::Output do
     end
 
     it "emits an empty findings array and empty skipped_formulae when there are no findings" do
-      expect(render(results([]))).to eq("findings" => [], "skipped_formulae" => [])
+      expect(render(results([]))).to include(
+        "findings" => [], "skipped_formulae" => [], "checked" => 0,
+        "complete" => true, "outdated_without_sbom" => [], "unscanned_formulae" => {}
+      )
     end
 
     it "emits one object per finding with vulnerabilities and patched arrays" do
@@ -150,7 +153,7 @@ RSpec.describe Homebrew::Vulns::Output do
                                   aliases: ["GHSA-x"], fixed: ["v10.0.0"])],
                   patched:  [vuln("CVE-2016-2399")])
       data = render(results([f]))
-      expect(data).to eq(
+      expect(data).to include(
         "findings"         => [
           {
             "formula"         => "vim",
@@ -174,6 +177,16 @@ RSpec.describe Homebrew::Vulns::Output do
     it "emits an empty patched array when nothing is resolved" do
       f = finding(name: "vim", version: "9.1", open: [vuln("CVE-2024-1234")])
       expect(render(results([f])).dig("findings", 0, "patched")).to eq []
+    end
+
+    it "marks unsupported-source coverage incomplete" do
+      expect(render(results([], skipped_formulae: ["aom"]))["complete"]).to be false
+    end
+
+    it "reports missing installed-source evidence" do
+      res = Homebrew::Vulns::Scanner::Results.new(findings: [], checked: 1, skipped_formulae: [],
+                                                  outdated_without_sbom: ["act"])
+      expect(render(res)).to include("complete" => false, "outdated_without_sbom" => ["act"])
     end
 
     it "includes skipped_formulae in the JSON output" do

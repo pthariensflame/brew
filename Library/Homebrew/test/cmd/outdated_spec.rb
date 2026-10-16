@@ -31,6 +31,28 @@ RSpec.describe Homebrew::Cmd::Outdated do
     end
   end
 
+  it "lists only vulnerable outdated formulae in JSON" do
+    write_formula "act", <<~RUBY
+      url "https://github.com/nektos/act/archive/refs/tags/v0.2.84.tar.gz"
+    RUBY
+    install_formula_version "act", "0.2.80"
+    FileUtils.cp(TEST_FIXTURE_DIR/"vulns/sbom.spdx.json", HOMEBREW_CELLAR/"act/0.2.80")
+    require "vulns"
+    allow(Homebrew::Vulns::OSV).to receive_messages(query_batch:   [[{ "id" => "CVE-TEST" }]],
+                                                    vulnerability: { "id" => "CVE-TEST" })
+
+    expect { described_class.new(["--vulnerable", "--json=v2"]).run }
+      .to output(/"name": "act"/).to_stdout
+  end
+
+  it "rejects cask vulnerability filtering" do
+    expect { described_class.new(["--vulnerable", "--cask"]) }.to raise_error(UsageError)
+  end
+
+  it "requires --vulnerable for severity filtering" do
+    expect { described_class.new(["--severity=high"]) }.to raise_error(UsageError)
+  end
+
   it "requires one named argument with --minimum-version" do
     expect { described_class.new(["--minimum-version=1.2.3"]).run }
       .to raise_error(UsageError, /`--minimum-version` requires exactly one formula or cask argument/)

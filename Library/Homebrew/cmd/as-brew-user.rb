@@ -16,10 +16,16 @@ module Homebrew
 
           Run a Homebrew command as the owner of `HOMEBREW_PREFIX` on macOS or Linux.
 
-          Uses the owner's home and a clean environment. Changing users requires
-          permission to use `sudo` or an already-root process; running as the
-          owner does not. When `sudo` is disabled or unavailable, root can switch
-          users directly.
+          Use this in administrative scripts and scheduled jobs to manage an
+          existing installation, including when no user is logged in.
+
+          Uses the owner's home and a clean environment, then loads `brew.env`
+          for that account. Changing users requires permission to use `sudo` or an
+          already-root process; running as the owner does not. When `sudo` is
+          disabled or unavailable, root can switch users directly.
+
+          Use `brew as-brew-user install --yes` <formula> for unattended installation.
+          On macOS, use `as-console-user` to select the active desktop user instead.
         EOS
 
         named_args min: 1

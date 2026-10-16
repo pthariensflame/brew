@@ -143,6 +143,9 @@ class Homebrew::Cmd::UpgradeCmd::Args < Homebrew::CLI::Args
   sig { returns(T.nilable(String)) }
   def servicedir; end
 
+  sig { returns(T.nilable(String)) }
+  def severity; end
+
   sig { returns(T::Boolean) }
   def skip_cask_deps?; end
 
@@ -151,6 +154,9 @@ class Homebrew::Cmd::UpgradeCmd::Args < Homebrew::CLI::Args
 
   sig { returns(T.nilable(String)) }
   def vst_plugindir; end
+
+  sig { returns(T::Boolean) }
+  def vulnerable?; end
 
   sig { returns(T::Boolean) }
   def y?; end

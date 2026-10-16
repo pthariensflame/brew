@@ -133,19 +133,31 @@ Control Homebrew's anonymous aggregate user behaviour analytics. Read more at
 
 Run a Homebrew command as the owner of `HOMEBREW_PREFIX` on macOS or Linux.
 
-Uses the owner's home and a clean environment. Changing users requires
-permission to use `sudo` or an already-root process; running as the owner does
-not. When `sudo` is disabled or unavailable, root can switch users directly.
+Use this in administrative scripts and scheduled jobs to manage an existing
+installation, including when no user is logged in.
+
+Uses the owner's home and a clean environment, then loads `brew.env` for that
+account. Changing users requires permission to use `sudo` or an already-root
+process; running as the owner does not. When `sudo` is disabled or unavailable,
+root can switch users directly.
+
+Use `brew as-brew-user install --yes` *`formula`* for unattended installation.
+On macOS, use `as-console-user` to select the active desktop user instead.
 
 ### `as-console-user` *`command`* \[*`args`* ...\]
 
-Run a Homebrew command as the active macOS console user.
+Run a Homebrew command as the user logged in to the macOS desktop.
 
-This is intended for MDM, Munki and Jamf workflows where `brew` is invoked as
-root but Homebrew operations should run as the logged-in console user. Uses
-their home and a clean environment, dispatching through `HOMEBREW_BREW_FILE`.
-Use `as-brew-user` to select the prefix owner. When `sudo` is disabled or
-unavailable, root can switch users directly.
+Use this from administrative scripts when the desktop user manages Homebrew, for
+example `brew as-console-user install --yes` *`formula`*. Fails if no supported
+desktop user is logged in.
+
+Uses the user's home and a clean environment, then loads `brew.env` for that
+account. Uses `sudo` when enabled and available; root can also switch users when
+`sudo` is disabled or unavailable.
+
+Use `as-brew-user` to select the installation's owner on macOS or Linux,
+including when no user is logged in.
 
 ### `autoremove` \[`--dry-run`\]
 
@@ -1773,6 +1785,15 @@ otherwise.
 : Only list a named formula or cask with an installed version below the given
   minimum version.
 
+`--vulnerable`
+
+: Only list outdated formulae with open vulnerabilities from OSV.dev. Stop if
+  any candidate cannot be reliably scanned. Implies `--formula`.
+
+`--severity`
+
+: Only select findings at or above `low`, `medium`, `high` or `critical`.
+
 `--fetch-HEAD`
 
 : Fetch the upstream repository to detect if the HEAD installation of the
@@ -2446,6 +2467,17 @@ for the upgraded formulae and casks or, every 30 days, for all packages.
 : Only upgrade a named formula or cask with an installed version below the given
   minimum version.
 
+`--vulnerable`
+
+: Only select outdated formulae with open vulnerabilities from OSV.dev. Stop if
+  any candidate cannot be reliably scanned. Implies `--formula`; dependencies
+  and dependants may also be upgraded. The available version is not guaranteed
+  to fix every finding.
+
+`--severity`
+
+: Only select findings at or above `low`, `medium`, `high` or `critical`.
+
 `-y`, `--no-ask`
 
 : Do not ask for confirmation before downloading and upgrading. Ask mode is the
@@ -2587,7 +2619,8 @@ available and the local username otherwise.
 
 Check *`formula`* for known security vulnerabilities using the OSV.dev database.
 
-With no arguments, all installed formulae are checked.
+With no arguments, all installed formulae are checked. Casks and packages
+installed by other package managers are not scanned.
 
 `-d`, `--deps`
 
@@ -2633,7 +2666,8 @@ With no arguments, all installed formulae are checked.
 
 `-j`, `--json`
 
-: Output JSON.
+: Output findings and scan coverage as JSON. A complete scan does not guarantee
+  the absence of vulnerabilities.
 
 ### `which-formula` \[`--explain`\] *`command`* \[...\]
 

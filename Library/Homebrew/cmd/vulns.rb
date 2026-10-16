@@ -7,7 +7,6 @@ require "formula"
 module Homebrew
   module Cmd
     class Vulns < AbstractCommand
-      SEVERITIES = %w[low medium high critical].freeze
       FIX_TYPES = %w[released patch any none unreleased].freeze
 
       cmd_args do
@@ -15,6 +14,7 @@ module Homebrew
           Check <formula> for known security vulnerabilities using the OSV.dev database.
 
           With no arguments, all installed formulae are checked.
+          Casks and packages installed by other package managers are not scanned.
         EOS
         switch "-d", "--deps",
                description: "Also check the dependencies of named formulae."
@@ -40,7 +40,8 @@ module Homebrew
         flag   "-m", "--max-summary=",
                description: "Truncate summaries to <n> characters (default 60, 0 for no limit)."
         switch "-j", "--json",
-               description: "Output JSON."
+               description: "Output findings and scan coverage as JSON. " \
+                            "A complete scan does not guarantee the absence of vulnerabilities."
 
         conflicts "--fix-available", "--no-fix-available", "--fix-type"
 
@@ -52,7 +53,7 @@ module Homebrew
         require "vulns"
 
         summary_width = max_summary
-        severity = min_severity
+        severity = Homebrew::Vulns.min_severity(args.severity)
 
         results = Homebrew::Vulns::Scanner.new(
           formulae,
@@ -62,7 +63,7 @@ module Homebrew
         ).scan
 
         if args.json?
-          Homebrew::Vulns::Output.json(results)
+          Homebrew::Vulns::Output.json(results, unscanned_formulae:)
         else
           Homebrew::Vulns::Output.text(
             results,
@@ -88,6 +89,12 @@ module Homebrew
           EOS
           Homebrew.failed = true
         end
+        if unscanned_formulae.value?("resolution_error")
+          ofail <<~EOS
+            Some installed formulae could not be resolved.
+            Reconcile scan coverage with `brew info --installed`.
+          EOS
+        end
         Homebrew.failed = true if results.any_open?
       end
 
@@ -112,8 +119,10 @@ module Homebrew
           Formulary.from_rack(rack)
         rescue Homebrew::UntrustedTapError => e
           untrusted_skipped << e.message.lines.first.to_s.strip
+          unscanned_formulae[rack.basename.to_s] = "untrusted_tap"
           nil
         rescue
+          unscanned_formulae[rack.basename.to_s] = "resolution_error"
           nil
         end.uniq(&:name)
       end
@@ -131,15 +140,9 @@ module Homebrew
         value.presence if value.is_a?(String)
       end
 
-      sig { returns(T.nilable(Symbol)) }
-      def min_severity
-        raw = args.severity
-        return if raw.nil?
-
-        raw = raw.downcase
-        raise UsageError, "`--severity` must be one of: #{SEVERITIES.join(", ")}" unless SEVERITIES.include?(raw)
-
-        raw.to_sym
+      sig { returns(T::Hash[String, String]) }
+      def unscanned_formulae
+        @unscanned_formulae ||= T.let({}, T.nilable(T::Hash[String, String]))
       end
 
       sig { returns(Integer) }

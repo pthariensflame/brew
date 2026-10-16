@@ -115,7 +115,7 @@ module Homebrew
       def scan
         queryable, skipped_formulae = @formulae.partition { |f| target_for(f) }
         skipped_formulae = skipped_formulae.map(&:full_name)
-        outdated_without_sbom = queryable.select { |f| stale_target?(f) }.map(&:name)
+        outdated_without_sbom = queryable.select { |f| stale_target?(f) }.map(&:full_name)
         return Results.new(findings: [], checked: 0, skipped_formulae:, outdated_without_sbom:) if queryable.empty?
 
         targets = queryable.filter_map { |f| target_for(f) }
@@ -147,7 +147,7 @@ module Homebrew
           next if open.empty? && patched.empty?
 
           Finding.new(
-            name:     formula.name,
+            name:     formula.full_name,
             version:  target.version,
             tag:      target.tag,
             repo_url: target.repo_url,
