@@ -140,17 +140,17 @@ RSpec.describe Homebrew::FormulaAuditor do
     end
   end
 
+  def homepage_auditor(**options)
+    formula_auditor "foo", <<~RUBY, { core_tap: true, new_formula: true }.merge(options)
+      class Foo < Formula
+        homepage "https://brew.sh"
+        url "https://brew.sh/foo-1.0.tar.gz"
+      end
+    RUBY
+  end
+
   describe "#audit_homepage_domain_age" do
     let(:domain_problem) { "`homepage` domain `brew.sh` was registered on 2026-07-01" }
-
-    def homepage_auditor(**options)
-      formula_auditor "foo", <<~RUBY, { core_tap: true, new_formula: true }.merge(options)
-        class Foo < Formula
-          homepage "https://brew.sh"
-          url "https://brew.sh/foo-1.0.tar.gz"
-        end
-      RUBY
-    end
 
     it "reports newly registered homepage domains" do
       allow(SharedAudits).to receive(:new_domain_problem)
@@ -183,6 +183,28 @@ RSpec.describe Homebrew::FormulaAuditor do
 
       expect(SharedAudits).not_to receive(:new_domain_problem)
       fa.audit_homepage_domain_age
+    end
+  end
+
+  describe "#audit_self_submission" do
+    let(:self_submission_problem) { "Self-submitted (a commit author's email address matches brew.sh)" }
+
+    it "reports self-submissions without a git forge repository" do
+      allow(SharedAudits).to receive(:self_submission_problem)
+        .with({ homepage: "https://brew.sh", url: "https://brew.sh/foo-1.0.tar.gz", head: nil })
+        .and_return(self_submission_problem)
+
+      fa = homepage_auditor online: true
+      fa.audit_self_submission
+
+      expect(fa.new_formula_problems.first[:message]).to eq(self_submission_problem)
+    end
+
+    it "does not check existing formulae" do
+      fa = homepage_auditor new_formula: false
+
+      expect(SharedAudits).not_to receive(:self_submission_problem)
+      fa.audit_self_submission
     end
   end
 

@@ -29,9 +29,10 @@ A new package must demonstrate public interest beyond its author.
 A GitHub project normally satisfies this requirement by meeting one of these thresholds:
 
 * at least 30 forks, 30 watchers or 75 stars.
-* at least 90 forks, 90 watchers or 225 stars for a self-submission by the repository owner.
+* at least 90 forks, 90 watchers or 225 stars for a self-submission by the repository owner or by a commit author whose email address is at the package's `homepage`, `url` or `head` domain.
 
 Equivalent public evidence may be considered for software hosted elsewhere.
+A self-submission without a public code repository is not automatically rejected, but its author must provide evidence of notability in the pull request.
 The metrics apply to the canonical upstream repository, not an unendorsed mirror or code-hosting fork.
 A code repository less than 30 days old is normally not eligible.
 Repository-specific exceptions may apply when these metrics do not represent the software's actual use or maintenance prospects.

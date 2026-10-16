@@ -245,6 +245,84 @@ RSpec.describe SharedAudits do
     end
   end
 
+  describe "::pull_request_commit_email_domains" do
+    let(:commits_url) { "https://api.github.com/repos/Homebrew/homebrew-cask/pulls/1/commits" }
+
+    before { described_class.pull_request_commit_email_domains = nil }
+    after { described_class.pull_request_commit_email_domains = nil }
+
+    it "returns the email domains of the pull request's commit authors" do
+      event_path = mktmpdir/"event.json"
+      event_path.write(JSON.generate({ pull_request: { commits_url: } }))
+      ENV["GITHUB_EVENT_PATH"] = event_path.to_s
+      first_page = [{ "commit" => { "author" => { "email" => "Jo@Acme.io" } } }]
+      second_page = [{ "commit" => { "author" => { "email" => "x@brew.sh" } } }]
+      allow(GitHub::API).to receive(:paginate_rest).with(commits_url)
+                                                   .and_yield(first_page, 1).and_yield(second_page, 2)
+
+      expect(described_class.pull_request_commit_email_domains).to eq(["acme.io", "brew.sh"])
+    end
+
+    it "returns no domains outside a pull request" do
+      ENV.delete("GITHUB_EVENT_PATH")
+
+      expect(described_class.pull_request_commit_email_domains).to be_empty
+    end
+  end
+
+  describe "::commit_email_domain_match" do
+    before { allow(described_class).to receive(:pull_request_commit_email_domains).and_return(["acme.io"]) }
+
+    it "returns the stanza and domain at a commit author's email domain" do
+      expect(described_class.commit_email_domain_match({ homepage: "https://www.acme.io/app" }))
+        .to eq([:homepage, "acme.io"])
+    end
+
+    it "matches a subdomain of a commit author's email domain" do
+      urls = { homepage: "https://acmeapp.com", url: "https://dl.acme.io/app.dmg" }
+
+      expect(described_class.commit_email_domain_match(urls)).to eq([:url, "dl.acme.io"])
+    end
+
+    it "ignores other domains" do
+      expect(described_class.commit_email_domain_match({ homepage: "https://notacme.io" })).to be_nil
+    end
+
+    it "ignores git forge domains" do
+      allow(described_class).to receive(:pull_request_commit_email_domains).and_return(["github.com"])
+
+      expect(described_class.commit_email_domain_match({ homepage: "https://github.com/acme/app" })).to be_nil
+    end
+  end
+
+  describe "::self_submission_problem" do
+    before { allow(described_class).to receive(:pull_request_commit_email_domains).and_return(["acme.io"]) }
+
+    it "reports self-submissions without a repository to assess" do
+      urls = { homepage: "https://acmeapp.com", url: "https://dl.acme.io/app.dmg" }
+
+      expect(described_class.self_submission_problem(urls)).to include("matches the `url` domain `dl.acme.io`")
+    end
+
+    it "reports self-submissions whose git forge pages have no repository to assess" do
+      urls = { homepage: "https://acme.github.io", url: "https://acme.io/app.dmg" }
+
+      expect(described_class.self_submission_problem(urls)).to include("matches the `url` domain `acme.io`")
+    end
+
+    it "ignores git forge URLs embedded in other URLs" do
+      urls = { homepage: "https://acme.io", url: "https://dl.acme.io/app.dmg?source=https://github.com/acme/app" }
+
+      expect(described_class.self_submission_problem(urls)).to include("matches the `homepage` domain `acme.io`")
+    end
+
+    it "leaves self-submissions with a repository to the notability audits" do
+      urls = { homepage: "https://acme.io", url: "https://github.com/acme/app/releases/download/v1.0/app.dmg" }
+
+      expect(described_class.self_submission_problem(urls)).to be_nil
+    end
+  end
+
   describe "::github_tag_from_url" do
     it "finds tags in archive urls" do
       url = "https://github.com/a/b/archive/refs/tags/v1.2.3.tar.gz"
