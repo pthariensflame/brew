@@ -121,9 +121,65 @@ RSpec.describe Sandbox, :needs_macos do
       end.new
     end
 
-    it "passes the profile directly to sandbox-exec" do
+    it "disclaims responsibility before applying the sandbox profile" do
       expect(sandbox.sandbox_command(["/bin/echo", "hello world"], dir.to_s))
-        .to eq(["/usr/bin/sandbox-exec", "-p", sandbox.seatbelt_profile, "/bin/echo", "hello world"])
+        .to eq(described_class.ruby_command("utils/disclaim.rb", "/usr/bin/sandbox-exec", "-p",
+                                            sandbox.seatbelt_profile, "/bin/echo", "hello world"))
+    end
+  end
+
+  describe "TCC responsibility" do
+    let(:check_responsibility) do
+      <<~RUBY
+        puts Fiddle::Function.new(
+          Fiddle::Handle::DEFAULT["responsibility_get_pid_responsible_for_pid"],
+          [Fiddle::TYPE_INT], Fiddle::TYPE_INT
+        ).call(Process.pid) == Process.pid
+      RUBY
+    end
+
+    it "disclaims responsibility for interactive workers or warns" do
+      expect do
+        sandbox.run RbConfig.ruby, "-r", HOMEBREW_LIBRARY_PATH/"standalone", "-rfiddle", "-e", check_responsibility
+      end.to output(/^true\r?$|^Warning: macOS privacy permission isolation is unavailable\./).to_stdout
+    end
+
+    it "disclaims responsibility for captured workers or warns" do
+      result = sandbox.capture(RbConfig.ruby,
+                               args:         ["-r", HOMEBREW_LIBRARY_PATH/"standalone", "-rfiddle", "-e",
+                                              check_responsibility],
+                               print_stderr: false)
+      expect(result.stdout + result.stderr)
+        .to match(/^true$|^Warning: macOS privacy permission isolation is unavailable\./)
+    end
+
+    context "when disclaiming falls back" do
+      # Simulate inherited responsibility even when the test runner is self-responsible.
+      let(:check_responsibility) { "puts false" }
+
+      before do
+        (dir/"disclaim_fallback.rb").write <<~RUBY
+          require #{(HOMEBREW_LIBRARY_PATH/"utils/disclaim").to_s.inspect}
+          Utils::Disclaim.singleton_class.class_eval { public :exec_without_disclaim }
+          Utils::Disclaim.exec_without_disclaim(ARGV)
+        RUBY
+        allow(described_class).to receive(:ruby_command).and_wrap_original do |original, _file, *args|
+          original.call((dir/"disclaim_fallback.rb").to_s, *args)
+        end
+      end
+
+      it "continues interactive workers with a warning" do
+        expect do
+          sandbox.run RbConfig.ruby, "-e", check_responsibility
+        end.to output(a_string_including("Warning: macOS privacy permission isolation is unavailable.",
+                                         "false")).to_stdout
+      end
+
+      it "continues captured workers with a warning" do
+        result = sandbox.capture(RbConfig.ruby, args: ["-e", check_responsibility], print_stderr: false)
+        expect([result.stdout, result.stderr])
+          .to match(["false\n", /Warning: macOS privacy permission isolation is unavailable\./])
+      end
     end
   end
 
