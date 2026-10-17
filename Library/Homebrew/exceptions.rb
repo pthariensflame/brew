@@ -806,6 +806,9 @@ end
 # Raised when curl cannot write a download to the local filesystem.
 class DownloadWriteError < RuntimeError; end
 
+# Raised when an archive cannot be extracted because the destination is full.
+class ExtractionDiskSpaceError < RuntimeError; end
+
 # Raised in {CurlDownloadStrategy#fetch}.
 class CurlDownloadStrategyError < RuntimeError
   sig { params(url: String, details: T.nilable(String)).void }

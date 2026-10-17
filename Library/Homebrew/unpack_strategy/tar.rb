@@ -52,6 +52,7 @@ module UnpackStrategy
                         args:    ["--extract", "--no-same-owner",
                                   "--file", tar_path,
                                   "--directory", unpack_dir],
+                        env:     { "LC_ALL" => "C" },
                         verbose:
       end
     end
