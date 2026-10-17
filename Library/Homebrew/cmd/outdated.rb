@@ -30,6 +30,12 @@ module Homebrew
         flag   "--minimum-version=", "--min-version=",
                description: "Only list a named formula or cask with an installed version below the given " \
                             "minimum version."
+        switch "--vulnerable",
+               description: "Only list outdated formulae with open vulnerabilities from OSV.dev. " \
+                            "Stop if any candidate cannot be reliably scanned. Implies `--formula`."
+        flag   "--severity=",
+               depends_on:  "--vulnerable",
+               description: "Only select findings at or above `low`, `medium`, `high` or `critical`."
         switch "--fetch-HEAD",
                description: "Fetch the upstream repository to detect if the HEAD installation of the " \
                             "formula is outdated. Otherwise, the repository's HEAD will only be checked for " \
@@ -45,6 +51,7 @@ module Homebrew
 
         conflicts "--quiet", "--verbose", "--json"
         conflicts "--formula", "--cask"
+        conflicts "--vulnerable", "--cask"
 
         named_args [:formula, :cask]
       end
@@ -58,7 +65,7 @@ module Homebrew
         when :v1
           odie "`brew outdated --json=v1` is no longer supported. Use brew outdated --json=v2 instead."
         when :v2, :default
-          formulae, casks = if args.formula?
+          formulae, casks = if args.formula? || args.vulnerable?
             [outdated_formulae, []]
           elsif args.cask?
             [[], outdated_casks]
@@ -76,7 +83,7 @@ module Homebrew
 
           outdated = formulae + casks
         else
-          outdated = if args.formula?
+          outdated = if args.formula? || args.vulnerable?
             outdated_formulae
           elsif args.cask?
             outdated_casks
@@ -242,10 +249,14 @@ module Homebrew
 
       sig { returns(T::Array[Formula]) }
       def outdated_formulae
-        T.cast(
+        formulae = T.cast(
           select_outdated(args.named.to_resolved_formulae.presence || Formula.installed).sort,
           T::Array[Formula],
         )
+        return formulae unless args.vulnerable?
+
+        require "vulns"
+        Homebrew::Vulns.select_vulnerable(formulae, severity: args.severity)
       end
 
       sig { returns(T::Array[Cask::Cask]) }

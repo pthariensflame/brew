@@ -2389,7 +2389,9 @@ _brew_outdated() {
       --json
       --minimum-version
       --quiet
+      --severity
       --verbose
+      --vulnerable
       "
       return
       ;;
@@ -3677,10 +3679,12 @@ _brew_upgrade() {
       --require-sha
       --screen-saverdir
       --servicedir
+      --severity
       --skip-cask-deps
       --verbose
       --vst-plugindir
       --vst3-plugindir
+      --vulnerable
       "
       return
       ;;

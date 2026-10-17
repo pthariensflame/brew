@@ -2105,6 +2105,20 @@ RSpec.describe Formula do
     expect(h["patches"]).to eq([])
   end
 
+  it "includes existing and missing SBOM paths for each installed keg" do
+    f = formula("foo") do
+      T.bind(self, T.class_of(Formula))
+      url "foo-2.0"
+    end
+    f.prefix("1.0").mkpath
+    f.prefix("2.0").mkpath
+    (f.prefix("2.0")/"sbom.spdx.json").write("{}")
+
+    expect(f.to_hash["installed"].map { |keg| keg.values_at("version", "sbom") }).to eq([
+      ["1.0", nil], ["2.0", (f.prefix("2.0")/"sbom.spdx.json").to_s]
+    ])
+  end
+
   specify "#to_hash dependencies" do
     f = formula "foo" do
       T.bind(self, T.class_of(Formula))

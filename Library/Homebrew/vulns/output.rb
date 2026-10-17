@@ -62,10 +62,10 @@ include_count: true)} " \
         patched_summary(patched, io:)
       end
 
-      sig { params(results: Scanner::Results, io: T.any(IO, StringIO)).void }
-      def self.json(results, io: $stdout)
+      sig { params(results: Scanner::Results, unscanned_formulae: T::Hash[String, String], io: T.any(IO, StringIO)).void }
+      def self.json(results, unscanned_formulae: {}, io: $stdout)
         data = {
-          findings:         results.findings.map do |f|
+          findings:              results.findings.map do |f|
             {
               formula:         f.name,
               version:         f.version,
@@ -75,7 +75,12 @@ include_count: true)} " \
               patched:         f.patched.map { |v| vuln_json(v) },
             }
           end,
-          skipped_formulae: results.skipped_formulae,
+          skipped_formulae:      results.skipped_formulae,
+          checked:               results.checked,
+          complete:              results.skipped_formulae.empty? &&
+                                 results.outdated_without_sbom.empty? && unscanned_formulae.empty?,
+          outdated_without_sbom: results.outdated_without_sbom,
+          unscanned_formulae:,
         }
         io.puts JSON.pretty_generate(data)
       end

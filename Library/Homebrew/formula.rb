@@ -3182,9 +3182,13 @@ class Formula
 
     hsh.merge!(dependencies_hash)
 
+    require "sbom"
+
     hsh["installed"] = installed_kegs.sort_by(&:scheme_and_version).map do |keg|
       tab = keg.tab
+      sbom_path = keg/SBOM::FILENAME
       {
+        "sbom"                 => sbom_path.file? ? sbom_path.to_s : nil,
         "version"              => keg.version.to_s,
         "used_options"         => tab.used_options.as_flags,
         "built_as_bottle"      => tab.built_as_bottle,

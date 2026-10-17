@@ -83,11 +83,19 @@ Turn Homebrew\[u2019]s analytics off\.
 .SS "\fBas\-brew\-user\fP \fIcommand\fP \fR[\fIargs\fP \.\.\.]"
 Run a Homebrew command as the owner of \fBHOMEBREW_PREFIX\fP on macOS or Linux\.
 .P
-Uses the owner\[u2019]s home and a clean environment\. Changing users requires permission to use \fBsudo\fP or an already\-root process; running as the owner does not\. When \fBsudo\fP is disabled or unavailable, root can switch users directly\.
-.SS "\fBas\-console\-user\fP \fIcommand\fP \fR[\fIargs\fP \.\.\.]"
-Run a Homebrew command as the active macOS console user\.
+Use this in administrative scripts and scheduled jobs to manage an existing installation, including when no user is logged in\.
 .P
-This is intended for MDM, Munki and Jamf workflows where \fBbrew\fP is invoked as root but Homebrew operations should run as the logged\-in console user\. Uses their home and a clean environment, dispatching through \fBHOMEBREW_BREW_FILE\fP\&\. Use \fBas\-brew\-user\fP to select the prefix owner\. When \fBsudo\fP is disabled or unavailable, root can switch users directly\.
+Uses the owner\[u2019]s home and a clean environment, then loads \fBbrew\.env\fP for that account\. Changing users requires permission to use \fBsudo\fP or an already\-root process; running as the owner does not\. When \fBsudo\fP is disabled or unavailable, root can switch users directly\.
+.P
+Use \fBbrew as\-brew\-user install \-\-yes\fP \fIformula\fP for unattended installation\. On macOS, use \fBas\-console\-user\fP to select the active desktop user instead\.
+.SS "\fBas\-console\-user\fP \fIcommand\fP \fR[\fIargs\fP \.\.\.]"
+Run a Homebrew command as the user logged in to the macOS desktop\.
+.P
+Use this from administrative scripts when the desktop user manages Homebrew, for example \fBbrew as\-console\-user install \-\-yes\fP \fIformula\fP\&\. Fails if no supported desktop user is logged in\.
+.P
+Uses the user\[u2019]s home and a clean environment, then loads \fBbrew\.env\fP for that account\. Uses \fBsudo\fP when enabled and available; root can also switch users when \fBsudo\fP is disabled or unavailable\.
+.P
+Use \fBas\-brew\-user\fP to select the installation\[u2019]s owner on macOS or Linux, including when no user is logged in\.
 .SS "\fBautoremove\fP \fR[\fB\-\-dry\-run\fP]"
 Uninstall formulae that were only installed as a dependency of another formula and are now no longer needed\.
 .TP
@@ -1130,6 +1138,12 @@ Print output in JSON format\. There are two versions: \fBv1\fP and \fBv2\fP\&\. 
 \fB\-\-minimum\-version\fP
 Only list a named formula or cask with an installed version below the given minimum version\.
 .TP
+\fB\-\-vulnerable\fP
+Only list outdated formulae with open vulnerabilities from OSV\.dev\. Stop if any candidate cannot be reliably scanned\. Implies \fB\-\-formula\fP\&\.
+.TP
+\fB\-\-severity\fP
+Only select findings at or above \fBlow\fP, \fBmedium\fP, \fBhigh\fP or \fBcritical\fP\&\.
+.TP
 \fB\-\-fetch\-HEAD\fP
 Fetch the upstream repository to detect if the HEAD installation of the formula is outdated\. Otherwise, the repository\[u2019]s HEAD will only be checked for updates when a new stable or development version has been released\.
 .TP
@@ -1543,6 +1557,12 @@ Show what would be upgraded, but do not actually upgrade anything\.
 \fB\-\-minimum\-version\fP
 Only upgrade a named formula or cask with an installed version below the given minimum version\.
 .TP
+\fB\-\-vulnerable\fP
+Only select outdated formulae with open vulnerabilities from OSV\.dev\. Stop if any candidate cannot be reliably scanned\. Implies \fB\-\-formula\fP; dependencies and dependants may also be upgraded\. The available version is not guaranteed to fix every finding\.
+.TP
+\fB\-\-severity\fP
+Only select findings at or above \fBlow\fP, \fBmedium\fP, \fBhigh\fP or \fBcritical\fP\&\.
+.TP
 \fB\-y\fP, \fB\-\-no\-ask\fP
 Do not ask for confirmation before downloading and upgrading\. Ask mode is the default\. Enabled by default if \fB$HOMEBREW_NO_ASK\fP is set\.
 .TP
@@ -1632,7 +1652,7 @@ Extract a specific \fIversion\fP of \fIformula\fP into a personal tap and instal
 .SS "\fBvulns\fP \fR[\fIoptions\fP] \fR[\fIformula\fP \.\.\.]"
 Check \fIformula\fP for known security vulnerabilities using the OSV\.dev database\.
 .P
-With no arguments, all installed formulae are checked\.
+With no arguments, all installed formulae are checked\. Casks and packages installed by other package managers are not scanned\.
 .TP
 \fB\-d\fP, \fB\-\-deps\fP
 Also check the dependencies of named formulae\.
@@ -1662,7 +1682,7 @@ Only report findings at or above: \fBlow\fP, \fBmedium\fP, \fBhigh\fP, \fBcritic
 Truncate summaries to \fIn\fP characters (default 60, 0 for no limit)\.
 .TP
 \fB\-j\fP, \fB\-\-json\fP
-Output JSON\.
+Output findings and scan coverage as JSON\. A complete scan does not guarantee the absence of vulnerabilities\.
 .SS "\fBwhich\-formula\fP \fR[\fB\-\-explain\fP] \fIcommand\fP \fR[\.\.\.]"
 Show which formula(e) provides the given command\.
 .TP

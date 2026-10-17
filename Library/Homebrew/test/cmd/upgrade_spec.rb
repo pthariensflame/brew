@@ -94,6 +94,49 @@ RSpec.describe Homebrew::Cmd::UpgradeCmd do
     allow(Homebrew::Upgrade).to receive_messages(upgrade_formulae: [], upgrade_dependents: [])
   end
 
+  describe "--vulnerable" do
+    before do
+      ENV["HOMEBREW_NO_INSTALL_FROM_API"] = "1"
+      write_formula "act", <<~RUBY
+        url "https://github.com/nektos/act/archive/refs/tags/v0.2.84.tar.gz"
+      RUBY
+      install_formula_version "act", "0.2.80", optlinked: true
+      FileUtils.cp(TEST_FIXTURE_DIR/"vulns/sbom.spdx.json", HOMEBREW_CELLAR/"act/0.2.80")
+      require "vulns"
+      allow(Homebrew::Vulns::OSV).to receive_messages(
+        query_batch:   [[{ "id" => "CVE-TEST" }]],
+        vulnerability: { "id" => "CVE-TEST", "database_specific" => { "severity" => "HIGH" } },
+      )
+    end
+
+    it "previews upgrades for vulnerable formulae" do
+      expect { described_class.new(["--vulnerable", "--dry-run"]).run }
+        .to output(/act.*0.2.80.*0.2.84/m).to_stdout
+    end
+
+    it "does not fall back to upgrading everything when no findings meet the severity" do
+      cmd = described_class.new(["--vulnerable", "--severity=critical", "--yes"])
+      expect(cmd).not_to receive(:upgrade_outdated_formulae!)
+      cmd.run
+    end
+
+    it "fails before upgrading when installed source metadata is missing" do
+      (HOMEBREW_CELLAR/"act/0.2.80/sbom.spdx.json").unlink
+      expect { described_class.new(["--vulnerable", "--yes"]).run }
+        .to raise_error(/Incomplete vulnerability scan/)
+    end
+
+    it "retains pins in the upgrade plan" do
+      Formula["act"].pin
+      expect { described_class.new(["--vulnerable", "--dry-run"]).run }
+        .to output(/Pinned.*act/m).to_stdout
+    end
+
+    it "rejects cask vulnerability filtering" do
+      expect { described_class.new(["--vulnerable", "--cask"]) }.to raise_error(UsageError)
+    end
+  end
+
   it "upgrades a Formula and Cask", :cask, :integration_test do
     formula_name = "testball_bottle"
     formula_rack = HOMEBREW_CELLAR/formula_name
