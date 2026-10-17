@@ -803,6 +803,9 @@ class DownloadError < RuntimeError
   end
 end
 
+# Raised when curl cannot write a download to the local filesystem.
+class DownloadWriteError < RuntimeError; end
+
 # Raised in {CurlDownloadStrategy#fetch}.
 class CurlDownloadStrategyError < RuntimeError
   sig { params(url: String, details: T.nilable(String)).void }
