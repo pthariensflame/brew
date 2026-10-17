@@ -132,16 +132,34 @@ module Formatter
   # like `(2.4MB)` in its own column.
   sig { params(changes: T::Array[VersionChange]).returns(T::Array[String]) }
   def self.version_changes(changes)
+    name_width = changes.map { |change| change.name.length }.max || 0
+    separator = (changes.one? ? " " : "  ")
     old_width = changes.map { |change| (change.old_version || change.new_version).length }.max || 0
+    new_width = changes.filter_map { |change| change.new_version.length if change.old_version }.max || 0
+    # Keep full versions in redirected output or when the terminal width is unknown.
+    if $stdout.tty? && Tty.width.positive?
+      # Reserve space for names, separators, size parentheses and the upgrade arrow.
+      available_width = Tty.width - name_width - separator.length
+      size_width = changes.filter_map { |change| change.size&.length }.max
+      size_parentheses_width = 2
+      available_width -= size_width + size_parentheses_width + separator.length if size_width
+      upgrade_arrow_width = 4
+      available_width -= upgrade_arrow_width if new_width.positive?
+
+      # Keep room for XXX.YYY.ZZZ plus "...", even if a very narrow terminal must wrap.
+      minimum_version_width = 14
+      # Share space evenly, letting a long version use space left by a short one.
+      old_width = [old_width, [available_width - new_width, available_width / 2, minimum_version_width].max].min
+      new_width = [available_width - old_width, minimum_version_width].max
+    end
+
     versions = changes.map do |change|
       old_version = change.old_version
-      next change.new_version unless old_version
+      next truncate(change.new_version, max: old_width) unless old_version
 
-      "#{old_version.ljust(old_width)} -> #{change.new_version}"
+      "#{truncate(old_version, max: old_width).ljust(old_width)} -> #{truncate(change.new_version, max: new_width)}"
     end
-    name_width = changes.map { |change| change.name.length }.max || 0
     versions_width = versions.map(&:length).max || 0
-    separator = (changes.one? ? " " : "  ")
 
     changes.each_with_index.map do |change, index|
       size = "(#{change.size})" if change.size
