@@ -1,6 +1,7 @@
 # typed: strict
 # frozen_string_literal: true
 
+require "livecheck/livecheck"
 require "system_command"
 require "utils/curl"
 require "utils/github/api"
@@ -552,6 +553,21 @@ module SharedAudits
   sig { params(url: String).returns(T.nilable(String)) }
   def self.forgejo_tag_from_url(url)
     url[%r{^https://codeberg\.org/[\w-]+/[\w.-]+/archive/(.+)\.(?:tar\.gz|zip)$}, 1]
+  end
+
+  sig { params(formula_or_cask: T.any(Formula, Cask::Cask)).returns(T.nilable(String)) }
+  def self.livecheck_required_problem(formula_or_cask)
+    reason = if formula_or_cask.livecheck.skip?
+      "uses `skip` in its `livecheck` block"
+    elsif !formula_or_cask.livecheck_defined? &&
+          Homebrew::Livecheck.checkable_urls(formula_or_cask).none? { |url| Homebrew::Livecheck::Strategy.from_url(url).any? }
+      "has no URL that `livecheck` can check without a `livecheck` block"
+    end
+    return if reason.nil?
+
+    noun, nouns = formula_or_cask.is_a?(Formula) ? %w[formula formulae] : %w[cask casks]
+    "New #{nouns} must have a working `livecheck` block but this #{noun} #{reason}. " \
+      "See #{Formatter.url("https://docs.brew.sh/Brew-Livecheck")}"
   end
 
   sig { params(formula_or_cask: T.any(Formula, Cask::Cask)).returns(T.nilable(String)) }
