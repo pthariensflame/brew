@@ -95,6 +95,13 @@ class Keg
     end
   end
 
+  # Whether the keg has any absolute symlinks, the only ones
+  # {#relativize_prefix_symlinks!} might rewrite.
+  sig { returns(T::Boolean) }
+  def absolute_symlinks?
+    symlink_files.any? { |file| file.readlink.absolute? }
+  end
+
   sig {
     params(_relocation: Relocation, with_placeholders: T::Boolean,
            files: T.nilable(T::Array[Pathname])).returns(T::Array[Pathname])

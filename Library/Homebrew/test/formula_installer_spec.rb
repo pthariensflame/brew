@@ -2320,6 +2320,18 @@ RSpec.describe FormulaInstaller do
     end
   end
 
+  describe "#fix_dynamic_linkage" do
+    it "skips kegs with nothing to fix" do
+      installer = described_class.new(Testball.new)
+      keg = instance_double(Keg)
+      allow(installer).to receive(:fix_dynamic_linkage?).with(keg).and_return(false)
+      allow(Sandbox).to receive(:isolate_operation?).and_return(false)
+      expect(keg).not_to receive(:fix_dynamic_linkage)
+
+      installer.fix_dynamic_linkage(keg)
+    end
+  end
+
   describe "#build" do
     it "denies build writes to the temporary Cellar after granting the formula's var", :needs_macos do
       skip "Sandbox not available." unless Sandbox.available?

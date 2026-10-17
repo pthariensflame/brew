@@ -554,6 +554,22 @@ RSpec.describe Keg do
     end
   end
 
+  describe "#absolute_symlinks?" do
+    let(:keg_path) { HOMEBREW_CELLAR/"foo/1.0" }
+
+    it "is true with an absolute symlink" do
+      ln_s "/usr/bin/true", keg_path/"bin/system"
+
+      expect(keg.absolute_symlinks?).to be true
+    end
+
+    it "is false with only relative symlinks" do
+      ln_s "hiworld", keg_path/"bin/self"
+
+      expect(keg.absolute_symlinks?).to be false
+    end
+  end
+
   describe "#delete_node_gyp_debris!" do
     it "deletes intermediate node-gyp objects but keeps addons and other objects" do
       keg_path = HOMEBREW_CELLAR/"foo/1.0"

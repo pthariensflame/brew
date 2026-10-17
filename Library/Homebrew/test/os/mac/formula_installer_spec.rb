@@ -43,4 +43,10 @@ RSpec.describe FormulaInstaller do
       expect(formula_installer.fresh_install?(formula)).to be false
     end
   end
+
+  describe "#fix_dynamic_linkage?" do
+    it "is true for every keg" do
+      expect(described_class.new(Testball.new).fix_dynamic_linkage?(instance_double(Keg))).to be true
+    end
+  end
 end
