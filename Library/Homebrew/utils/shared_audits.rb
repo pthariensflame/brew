@@ -13,6 +13,12 @@ module SharedAudits
   GITLAB_NOTABILITY_THRESHOLDS = T.let({ forks: 30, stars: 75 }.freeze, T::Hash[Symbol, Integer])
   BITBUCKET_NOTABILITY_THRESHOLDS = T.let({ forks: 30, watchers: 75 }.freeze, T::Hash[Symbol, Integer])
   FORGEJO_NOTABILITY_THRESHOLDS = T.let({ forks: 30, watchers: 30, stars: 75 }.freeze, T::Hash[Symbol, Integer])
+  NOTABILITY_REPOSITORY_REGEXES = T.let({
+    github:    %r{\Ahttps?://github\.com/([^/]+)/([^/]+)/?.*},
+    gitlab:    %r{\Ahttps?://gitlab\.com/([^/]+)/([^/]+)/?.*},
+    bitbucket: %r{\Ahttps?://bitbucket\.org/([^/]+)/([^/]+)/?.*},
+    forgejo:   %r{\Ahttps?://codeberg\.org/([^/]+)/([^/]+)/?.*},
+  }.freeze, T::Hash[Symbol, Regexp])
   NEW_DOMAIN_THRESHOLD_DAYS = 30
   GIT_FORGE_DOMAINS = %w[
     bitbucket.org
@@ -34,9 +40,16 @@ module SharedAudits
   @pull_request_author = T.let(nil, T.nilable(String))
   @pull_request_author_computed = T.let(false, T::Boolean)
   @self_submission_cache = T.let({}, T::Hash[String, T::Boolean])
+  @pull_request_commit_email_domains = T.let(nil, T.nilable(T::Array[String]))
   @rdap_services = T.let(nil, T.nilable(RdapServices))
 
   class << self
+    sig {
+      params(pull_request_commit_email_domains: T.nilable(T::Array[String]))
+        .returns(T.nilable(T::Array[String]))
+    }
+    attr_writer :pull_request_commit_email_domains
+
     sig { params(rdap_services: T.nilable(RdapServices)).returns(T.nilable(RdapServices)) }
     attr_writer :rdap_services
   end
@@ -51,15 +64,8 @@ module SharedAudits
 
   sig { params(homepage: String).returns(T.nilable(String)) }
   def self.new_domain_problem(homepage)
-    host = begin
-      URI(homepage).host
-    rescue URI::InvalidURIError
-      nil
-    end
-    return if host.blank?
-
-    domain = host.downcase.delete_prefix("www.")
-    return if GIT_FORGE_DOMAINS.any? { |forge| domain == forge || domain.end_with?(".#{forge}") }
+    domain = url_domain(homepage)
+    return if domain.nil? || git_forge_domain?(domain)
 
     @rdap_services ||= begin
       result = Utils::Curl.curl_output(RDAP_BOOTSTRAP_URL, max_time: RDAP_TIMEOUT_SECONDS)
@@ -145,12 +151,50 @@ module SharedAudits
     return @pull_request_author if @pull_request_author_computed
 
     @pull_request_author_computed = true
-    github_event_path = ENV.fetch("GITHUB_EVENT_PATH", nil)
-    return @pull_request_author = nil if github_event_path.blank?
+    @pull_request_author = github_event_pull_request_value("user", "login")
+  end
 
-    @pull_request_author = JSON.parse(File.read(github_event_path)).dig("pull_request", "user", "login")
-  rescue Errno::ENOENT, JSON::ParserError
-    @pull_request_author = nil
+  sig { returns(T::Array[String]) }
+  def self.pull_request_commit_email_domains
+    @pull_request_commit_email_domains ||= begin
+      commits_url = github_event_pull_request_value("commits_url")
+      commits = []
+      if commits_url.present?
+        GitHub::API.paginate_rest(commits_url) do |page_commits, _page|
+          commits.concat(page_commits)
+        end
+      end
+      commits.filter_map { |commit| commit.dig("commit", "author", "email").to_s.split("@").last&.downcase }
+    rescue GitHub::API::Error
+      []
+    end
+  end
+
+  sig { params(urls: T::Hash[Symbol, T.nilable(String)]).returns(T.nilable([Symbol, String])) }
+  def self.commit_email_domain_match(urls)
+    urls.each do |stanza, url|
+      next unless url
+
+      domain = url_domain(url)
+      next if domain.nil? || git_forge_domain?(domain)
+      next if pull_request_commit_email_domains.none? { |email_domain| domain_or_subdomain?(domain, email_domain) }
+
+      return [stanza, domain]
+    end
+    nil
+  end
+
+  sig { params(urls: T::Hash[Symbol, T.nilable(String)]).returns(T.nilable(String)) }
+  def self.self_submission_problem(urls)
+    return if urls.values.compact.grep(Regexp.union(NOTABILITY_REPOSITORY_REGEXES.values)).any?
+
+    match = commit_email_domain_match(urls)
+    return if match.nil?
+
+    stanza, domain = match
+    "Self-submitted (a commit author's email address matches the `#{stanza}` domain `#{domain}`) " \
+      "without a GitHub, GitLab, Bitbucket or Codeberg repository to assess its notability. " \
+      "This is not an automatic rejection, but the pull request author must provide evidence that it is notable."
   end
 
   sig { params(submitter: T.nilable(String), repo_owner: String).returns(T::Boolean) }
@@ -179,6 +223,36 @@ module SharedAudits
     return thresholds unless self_submission
 
     thresholds.transform_values { |value| value * SELF_SUBMISSION_THRESHOLD_MULTIPLIER }
+  end
+
+  sig { params(keys: String).returns(T.nilable(String)) }
+  private_class_method def self.github_event_pull_request_value(*keys)
+    github_event_path = ENV.fetch("GITHUB_EVENT_PATH", nil)
+    return if github_event_path.blank?
+
+    JSON.parse(File.read(github_event_path)).dig("pull_request", *keys)
+  rescue Errno::ENOENT, JSON::ParserError
+    nil
+  end
+
+  sig { params(url: String).returns(T.nilable(String)) }
+  private_class_method def self.url_domain(url)
+    host = begin
+      URI(url).host
+    rescue URI::InvalidURIError
+      nil
+    end
+    host.downcase.delete_prefix("www.") if host.present?
+  end
+
+  sig { params(domain: String).returns(T::Boolean) }
+  private_class_method def self.git_forge_domain?(domain)
+    GIT_FORGE_DOMAINS.any? { |forge| domain_or_subdomain?(domain, forge) }
+  end
+
+  sig { params(domain: String, parent: String).returns(T::Boolean) }
+  private_class_method def self.domain_or_subdomain?(domain, parent)
+    domain == parent || domain.end_with?(".#{parent}")
   end
 
   sig { params(product: String, cycle: String).returns(T.nilable(T::Hash[String, T.untyped])) }

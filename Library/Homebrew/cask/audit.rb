@@ -1086,7 +1086,7 @@ module Cask
       return unless new_cask?
       return if (url = cask.url).nil?
 
-      user, repo = get_repo_data(%r{https?://github\.com/([^/]+)/([^/]+)/?.*})
+      user, repo = get_repo_data(SharedAudits::NOTABILITY_REPOSITORY_REGEXES.fetch(:github))
       return if user.nil? || repo.nil?
 
       odebug "Auditing GitHub repo"
@@ -1101,7 +1101,7 @@ module Cask
       return unless new_cask?
       return if (url = cask.url).nil?
 
-      user, repo = get_repo_data(%r{https?://gitlab\.com/([^/]+)/([^/]+)/?.*})
+      user, repo = get_repo_data(SharedAudits::NOTABILITY_REPOSITORY_REGEXES.fetch(:gitlab))
       return if user.nil? || repo.nil?
 
       odebug "Auditing GitLab repo"
@@ -1116,7 +1116,7 @@ module Cask
       return unless new_cask?
       return if (url = cask.url).nil?
 
-      user, repo = get_repo_data(%r{https?://bitbucket\.org/([^/]+)/([^/]+)/?.*})
+      user, repo = get_repo_data(SharedAudits::NOTABILITY_REPOSITORY_REGEXES.fetch(:bitbucket))
       return if user.nil? || repo.nil?
 
       odebug "Auditing Bitbucket repo"
@@ -1131,7 +1131,7 @@ module Cask
       return unless new_cask?
       return if (url = cask.url).nil?
 
-      user, repo = get_repo_data(%r{https?://codeberg\.org/([^/]+)/([^/]+)/?.*})
+      user, repo = get_repo_data(SharedAudits::NOTABILITY_REPOSITORY_REGEXES.fetch(:forgejo))
       return if user.nil? || repo.nil?
 
       odebug "Auditing Forgejo repo"
@@ -1198,6 +1198,16 @@ module Cask
 
       new_domain_problem = SharedAudits.new_domain_problem(homepage)
       add_error new_domain_problem if new_domain_problem
+    end
+
+    sig { void }
+    def audit_self_submission
+      return unless new_cask?
+      return unless online?
+      return unless cask.tap&.official?
+
+      self_submission_problem = SharedAudits.self_submission_problem(self_submission_urls)
+      add_error self_submission_problem if self_submission_problem
     end
 
     sig { void }
@@ -1480,7 +1490,13 @@ module Cask
     def self_submission?(repo_owner)
       return false if repo_owner.empty?
 
-      SharedAudits.self_submission_for_repo_owner?(repo_owner)
+      SharedAudits.self_submission_for_repo_owner?(repo_owner) ||
+        !SharedAudits.commit_email_domain_match(self_submission_urls).nil?
+    end
+
+    sig { returns(T::Hash[Symbol, T.nilable(String)]) }
+    def self_submission_urls
+      { homepage: cask.homepage, url: cask.url&.to_s }
     end
 
     sig {

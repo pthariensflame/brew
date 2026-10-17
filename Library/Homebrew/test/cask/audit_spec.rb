@@ -1699,6 +1699,60 @@ RSpec.describe Cask::Audit, :cask do
       end
     end
 
+    describe "self-submission" do
+      let(:only) { ["self_submission"] }
+      let(:new_cask) { true }
+      let(:self_submission_problem) { "Self-submitted (a commit author's email address matches brew.sh)" }
+      let(:cask) do
+        Cask::Cask.new("self-submission", tap: CoreCaskTap.instance) do
+          version "1.0"
+          sha256 :no_check
+          url "https://brew.sh/self-submission.tar.gz"
+          homepage "https://brew.sh"
+        end
+      end
+
+      context "when a commit author's email address matches the homepage domain" do
+        before do
+          allow(SharedAudits).to receive(:self_submission_problem)
+            .with({ homepage: "https://brew.sh", url: "https://brew.sh/self-submission.tar.gz" })
+            .and_return(self_submission_problem)
+        end
+
+        it { is_expected.to error_with(self_submission_problem) }
+      end
+
+      context "when the cask is not new" do
+        let(:new_cask) { false }
+
+        it "does not check for self-submission" do
+          expect(SharedAudits).not_to receive(:self_submission_problem)
+          run
+        end
+      end
+    end
+
+    describe "GitHub repository notability" do
+      let(:only) { ["github_repository"] }
+      let(:new_cask) { true }
+      let(:cask) do
+        Cask::Cask.new("github-repository", tap: CoreCaskTap.instance) do
+          version "1.0"
+          sha256 :no_check
+          url "https://github.com/acme/app/releases/download/1.0/app.dmg"
+          homepage "https://acme.io"
+        end
+      end
+
+      it "applies the self-submission thresholds when a commit author's email address matches the homepage" do
+        allow(SharedAudits).to receive_messages(self_submission_for_repo_owner?:   false,
+                                                pull_request_commit_email_domains: ["acme.io"])
+
+        expect(SharedAudits).to receive(:github).with("acme", "app", self_submission: true)
+        run
+      end
+    end
+
     describe "GitHub repository archived check" do
       let(:online) { true }
       let(:only) { ["github_repository_archived"] }
