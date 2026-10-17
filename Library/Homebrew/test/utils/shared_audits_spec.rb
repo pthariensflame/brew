@@ -330,6 +330,53 @@ RSpec.describe SharedAudits do
     end
   end
 
+  describe "::livecheck_required_problem" do
+    it "reports a `livecheck` block that uses `skip`" do
+      cask = Cask::Cask.new("livecheck-skip") do
+        url "https://github.com/acme/app/releases/download/1.0/app.dmg"
+        livecheck do
+          skip "No version information available"
+        end
+      end
+
+      expect(described_class.livecheck_required_problem(cask)).to include("uses `skip` in its `livecheck` block")
+    end
+
+    it "reports URLs without a default `livecheck` strategy" do
+      f = formula do
+        T.bind(self, T.class_of(Formula))
+        homepage "https://brew.sh"
+        url "https://brew.sh/foo-1.0.tar.gz"
+      end
+
+      expect(described_class.livecheck_required_problem(f)).to include("New formulae must have a working `livecheck`")
+    end
+
+    it "accepts URLs with a default `livecheck` strategy" do
+      cask = Cask::Cask.new("livecheck-default") do
+        url "https://github.com/acme/app/releases/download/1.0/app.dmg"
+        homepage "https://acme.io"
+      end
+
+      expect(described_class.livecheck_required_problem(cask)).to be_nil
+    end
+
+    it "accepts a `livecheck` block that does not use `skip`" do
+      f = formula do
+        T.bind(self, T.class_of(Formula))
+        homepage "https://brew.sh"
+        url "https://brew.sh/foo-1.0.tar.gz"
+
+        livecheck do
+          url :homepage
+          regex(/foo[._-]v?(\d+(?:\.\d+)+)\.t/i)
+        end
+      end
+
+      expect(described_class.livecheck_required_problem(f)).to be_nil
+    end
+  end
+
   describe "::github_tag_from_url" do
     it "finds tags in archive urls" do
       url = "https://github.com/a/b/archive/refs/tags/v1.2.3.tar.gz"

@@ -1211,6 +1211,15 @@ module Cask
     end
 
     sig { void }
+    def audit_livecheck_required
+      return unless new_cask?
+      return unless cask.tap&.official?
+
+      livecheck_required_problem = SharedAudits.livecheck_required_problem(cask)
+      add_error livecheck_required_problem if livecheck_required_problem
+    end
+
+    sig { void }
     def audit_url_https_availability
       return unless online?
       return unless (url = cask.url)

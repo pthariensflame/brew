@@ -692,6 +692,15 @@ module Homebrew
     end
 
     sig { void }
+    def audit_livecheck_required
+      return unless @core_tap
+      return unless @new_formula
+
+      livecheck_required_problem = SharedAudits.livecheck_required_problem(formula)
+      new_formula_problem livecheck_required_problem if livecheck_required_problem
+    end
+
+    sig { void }
     def audit_duplicate_formula
       return unless @core_tap
       return unless @new_formula

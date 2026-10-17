@@ -208,6 +208,26 @@ RSpec.describe Homebrew::FormulaAuditor do
     end
   end
 
+  describe "#audit_livecheck_required" do
+    let(:livecheck_required_problem) { "New formulae must have a working `livecheck` block" }
+
+    it "reports new formulae without a working livecheck" do
+      allow(SharedAudits).to receive(:livecheck_required_problem).and_return(livecheck_required_problem)
+
+      fa = homepage_auditor
+      fa.audit_livecheck_required
+
+      expect(fa.new_formula_problems.first[:message]).to eq(livecheck_required_problem)
+    end
+
+    it "does not check existing formulae" do
+      fa = homepage_auditor new_formula: false
+
+      expect(SharedAudits).not_to receive(:livecheck_required_problem)
+      fa.audit_livecheck_required
+    end
+  end
+
   describe "#audit_license" do
     let(:spdx_license_data) { SPDX.license_data }
     let(:spdx_exception_data) { SPDX.exception_data }

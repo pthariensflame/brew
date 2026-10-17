@@ -1732,6 +1732,38 @@ RSpec.describe Cask::Audit, :cask do
       end
     end
 
+    describe "livecheck required" do
+      let(:only) { ["livecheck_required"] }
+      let(:new_cask) { true }
+      let(:livecheck_required_problem) { "New casks must have a working `livecheck` block" }
+      let(:cask) do
+        Cask::Cask.new("livecheck-required", tap: CoreCaskTap.instance) do
+          version "1.0"
+          sha256 :no_check
+          url "https://brew.sh/livecheck-required.dmg"
+          homepage "https://brew.sh"
+        end
+      end
+
+      context "when the cask has no working livecheck" do
+        before do
+          allow(SharedAudits).to receive(:livecheck_required_problem).with(cask)
+                                                                     .and_return(livecheck_required_problem)
+        end
+
+        it { is_expected.to error_with(livecheck_required_problem) }
+      end
+
+      context "when the cask is not new" do
+        let(:new_cask) { false }
+
+        it "does not check for a working livecheck" do
+          expect(SharedAudits).not_to receive(:livecheck_required_problem)
+          run
+        end
+      end
+    end
+
     describe "GitHub repository notability" do
       let(:only) { ["github_repository"] }
       let(:new_cask) { true }

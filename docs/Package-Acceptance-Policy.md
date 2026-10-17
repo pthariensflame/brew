@@ -22,6 +22,7 @@ Distribution through a third-party tap does not imply Homebrew endorsement or su
 A package must represent software with a public presence independent of Homebrew and a homepage that explains the project.
 The software must be actively maintained upstream, have no known unpatched security vulnerabilities and remain practical for Homebrew to support.
 Discontinued software and software that relies on Homebrew-specific patches to compensate for an unmaintained upstream are not eligible.
+A new package must have a working [`livecheck`](Brew-Livecheck.md) so Homebrew can detect new versions: either a URL that `livecheck` can check by default or a `livecheck` block that does not use `skip`.
 
 ## Notability
 
