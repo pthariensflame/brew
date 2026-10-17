@@ -853,6 +853,53 @@ RSpec.describe "Utils::Curl" do
     end
   end
 
+  describe "::curl_download" do
+    let(:url) { "https://example.com/download.zip" }
+    let(:destination) { mktmpdir/"download.zip.incomplete" }
+    let(:write_error) do
+      ErrorDuringExecution.new(["curl", url], status: 23,
+                                              output: [[:stderr, "curl: (23) Failed writing received data"]])
+    end
+
+    before do
+      destination.write("partial")
+      allow(self).to receive(:curl).and_raise(write_error)
+    end
+
+    it "identifies the destination and suggests checking disk space and permissions" do
+      expect { curl_download(url, to: destination) }.to raise_error(DownloadWriteError, <<~EOS)
+        Could not write download to #{destination}
+        Check that the destination has enough free disk space and is writable.
+        curl: (23) Failed writing received data
+      EOS
+    end
+
+    it "preserves the partial download after a write failure" do
+      begin
+        curl_download(url, to: destination)
+      rescue RuntimeError
+        nil
+      end
+
+      expect(destination.read).to eq("partial")
+    end
+
+    it "preserves the original error as the cause" do
+      expect { curl_download(url, to: destination) }.to raise_error(DownloadWriteError) { |error|
+        expect(error.cause).to eq(write_error)
+      }
+    end
+
+    it "propagates network failures unchanged" do
+      network_error = ErrorDuringExecution.new(["curl", url], status: 7)
+      allow(self).to receive(:curl).and_raise(network_error)
+
+      expect { curl_download(url, to: destination) }.to raise_error { |error|
+        expect(error).to equal(network_error)
+      }
+    end
+  end
+
   describe "curl request deadlines" do
     let(:url) { "https://example.com/download.zip" }
     let(:start_time) { Time.at(1_700_000_000) }

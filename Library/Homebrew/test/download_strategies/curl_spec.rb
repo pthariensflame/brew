@@ -110,6 +110,17 @@ RSpec.describe CurlDownloadStrategy do
       FileUtils.touch strategy.temporary_path
     end
 
+    context "when the destination cannot be written" do
+      let(:specs) { { mirrors: ["https://mirror.example.com/foo.tar.gz"] } }
+
+      it "does not try a mirror after a local write failure" do
+        expect(strategy).to receive(:curl).once
+                                          .and_raise(ErrorDuringExecution.new(["curl", url], status: 23))
+
+        expect { strategy.fetch }.to raise_error(DownloadWriteError)
+      end
+    end
+
     it "calls curl with default arguments" do
       expect(strategy).to receive(:curl).with(
         "--remote-time",

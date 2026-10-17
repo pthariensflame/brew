@@ -349,6 +349,14 @@ module Utils
       args = ["--remote-time", "--output", destination.to_s, *args]
 
       curl(*args, **options, timeout: Utils::Timer.remaining!(end_time))
+    rescue ErrorDuringExecution => e
+      raise if e.exitstatus != 23 # CURLE_WRITE_ERROR
+
+      raise DownloadWriteError, <<~EOS
+        Could not write download to #{destination}
+        Check that the destination has enough free disk space and is writable.
+        #{strip_progress_bar(Tty.collapse_carriage_returns(e.stderr)).strip}
+      EOS
     end
 
     # Run after `Tty.collapse_carriage_returns`; a bar-only line becomes empty.
