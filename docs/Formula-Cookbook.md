@@ -752,6 +752,8 @@ livecheck do
 end
 ```
 
+Omit a `livecheck` block if a strategy automatically provides correct version information and no changes are needed.
+
 For `url`/`regex` guidelines and additional `livecheck` block examples, refer to the [`brew livecheck`](Brew-Livecheck.md) documentation. For more technical information on the methods used in a `livecheck` block, please refer to the [`Livecheck` class](/rubydoc/Livecheck.html) documentation.
 
 ### Excluding formulae from autobumping
