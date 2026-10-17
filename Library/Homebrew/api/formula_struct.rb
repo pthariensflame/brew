@@ -90,6 +90,7 @@ module Homebrew
       const :bottle_checksums, T::Array[T::Hash[Symbol, T.any(String, Symbol)]], default: []
       const :bottle_rebuild, Integer, default: 0
       const :caveats, T.nilable(String)
+      const :compatibility_version, T.nilable(Integer)
       const :conflicts, T::Array[[String, T::Hash[Symbol, String]]], default: []
       const :deprecate_args, T::Hash[Symbol, T.nilable(T.any(String, Symbol))], default: {}
       const :desc, String

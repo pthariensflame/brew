@@ -132,6 +132,31 @@ RSpec.describe Dependency do
     end
   end
 
+  describe "Dependency#installed? with minimum_compatibility_version" do
+    subject(:dependency) { described_class.new("foo") }
+
+    let(:keg) { instance_double(Keg, name: "foo") }
+
+    before do
+      allow(dependency).to receive(:to_installed_formula).and_return(
+        instance_double(Formula, opt_prefix: instance_double(Pathname, exist?: true),
+                                 latest_version_installed?: false, any_installed_keg: keg,
+                                 possible_names: ["foo"], compatibility_version: 1),
+      )
+      allow(Tab).to receive(:for_keg).with(keg).and_return(
+        instance_double(Tab, source: { "versions" => { "compatibility_version" => 1 } }),
+      )
+    end
+
+    it "is true for an outdated keg with a matching compatibility_version" do
+      expect(dependency.installed?(minimum_compatibility_version: 1)).to be(true)
+    end
+
+    it "is false for an outdated keg with a different compatibility_version" do
+      expect(dependency.installed?(minimum_compatibility_version: 2)).to be(false)
+    end
+  end
+
   describe "Dependency#satisfied? with bottle_os_version" do
     subject(:dependency) { described_class.new("foo") }
 

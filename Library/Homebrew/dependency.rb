@@ -81,15 +81,13 @@ class Dependency
 
     return true if formula.latest_version_installed?
 
-    return false if minimum_version.blank?
+    return false if minimum_version.blank? && minimum_compatibility_version.blank?
 
     installed_keg = formula.any_installed_keg
     return false unless installed_keg
 
     # If the keg name doesn't match, we may have moved from an alias to a full formula and need to upgrade.
     return false unless formula.possible_names.include?(installed_keg.name)
-
-    installed_version = installed_keg.version
 
     # If both the formula and minimum dependency have a compatibility_version set,
     # and they match, the dependency is satisfied regardless of version/revision.
@@ -101,6 +99,10 @@ class Dependency
       return true if installed_compatibility_version == minimum_compatibility_version &&
                      formula.compatibility_version == minimum_compatibility_version
     end
+
+    return false if minimum_version.blank?
+
+    installed_version = installed_keg.version
 
     # Tabs prior to 4.1.18 did not have revision or pkg_version fields.
     # As a result, we have to be more conversative when we do not have
