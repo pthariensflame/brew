@@ -188,6 +188,13 @@ RSpec.describe SharedAudits do
         .to include("`homepage` domain `brew.sh` was registered on 2026-07-01")
     end
 
+    it "parses `whois` registration dates that start with a weekday" do
+      mock_whois stdout: whois_output.sub("Creation Date: 2026-07-01T15:50:45Z", "Registered:\tWed Jul 1 2026")
+
+      expect(described_class.new_domain_problem("https://brew.sh"))
+        .to include("`homepage` domain `brew.sh` was registered on 2026-07-01")
+    end
+
     it "ignores the IANA record for the TLD when the registry publishes no date" do
       mock_whois stdout: "#{whois_output.lines.take(5).join}Domain: brew.sh\nStatus: connect\n"
 

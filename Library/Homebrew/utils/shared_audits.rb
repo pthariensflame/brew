@@ -25,7 +25,7 @@ module SharedAudits
   ].freeze
   WHOIS_TIMEOUT_SECONDS = 5
   WHOIS_CREATION_DATE_REGEX = /^\s*(?:creation\s+date|created(?:\s+on)?|registered(?:\s+on)?|
-                                registration\s+(?:date|time))\s*:\s*(\S+)/ix
+                                registration\s+(?:date|time))\s*:\s*(.+)/ix
   # RDAP is the IETF successor to WHOIS: ICANN requires every gTLD registry to serve it
   # and IANA's bootstrap file lists the server for each TLD (gTLD or ccTLD) that does.
   RDAP_BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json"
