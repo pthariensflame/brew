@@ -718,6 +718,23 @@ RSpec.describe FormulaInstaller do
 
         installer.enqueue_fetch
       end
+
+      it "enqueues attestation verification for cached bottles" do
+        allow(bottle.cached_download).to receive(:exist?).and_return(true)
+        allow(installer).to receive(:fetch_dependencies)
+
+        expect(download_queue).to receive(:enqueue).with(bottle, check_attestation: true)
+
+        installer.enqueue_fetch
+      end
+
+      it "enqueues attestation verification before staging cached bottles" do
+        allow(bottle.cached_download).to receive(:exist?).and_return(true)
+
+        expect(download_queue).to receive(:enqueue).with(bottle, check_attestation: true, stage: true)
+
+        installer.enqueue_bottle_download(stage: true)
+      end
     end
   end
 

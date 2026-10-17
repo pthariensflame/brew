@@ -169,23 +169,25 @@ module Homebrew
       # `actions/attest` action.
       subject = bottle.filename.to_s if subject.blank?
 
-      attestation = if bottle.tag.to_sym == :all
-        # :all-tagged bottles are created by `brew bottle --merge`, and are not directly
-        # bound to their own filename (since they're created by deduplicating other filenames).
-        # To verify these, we parse each attestation subject and look for one with a matching
-        # formula (name, version), but not an exact tag match.
-        # This is sound insofar as the signature has already been verified. However,
-        # longer term, we should also directly attest to `:all`-tagged bottles.
-        attestations.find do |a|
-          candidate_subjects = a.dig("verificationResult", "statement", "subject")
-          candidate_subjects.any? do |candidate|
-            candidate["name"].start_with? "#{bottle.filename.name}--#{bottle.filename.version}"
+      attestation = attestations.find do |a|
+        a.dig("verificationResult", "statement", "subject").any? do |candidate|
+          next false if candidate.dig("digest", "sha256") !=
+                        Downloadable.verification_cache.sha256(bottle.cached_download)
+
+          if bottle.tag.to_sym == :all
+            # :all-tagged bottles are created by `brew bottle --merge`, and are not directly
+            # bound to their own filename (since they're created by deduplicating other filenames).
+            # To verify these, we parse each attestation subject and look for one with a matching
+            # formula (name, version), but not an exact tag match.
+            # This is sound insofar as the signature has already been verified. However,
+            # longer term, we should also directly attest to `:all`-tagged bottles.
+            candidate["name"].match?(
+              /\A#{Regexp.escape("#{bottle.filename.name}--#{bottle.filename.version}")}\.
+                [^.]+\.bottle(?:\.\d+)?\.tar\.gz\z/x,
+            )
+          else
+            candidate["name"] == subject
           end
-        end
-      else
-        attestations.find do |a|
-          candidate_subjects = a.dig("verificationResult", "statement", "subject")
-          candidate_subjects.any? { |candidate| candidate["name"] == subject }
         end
       end
 
