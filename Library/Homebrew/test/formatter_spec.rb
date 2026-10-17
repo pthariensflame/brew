@@ -126,6 +126,69 @@ RSpec.describe Formatter do
     end
   end
 
+  describe ".version_changes" do
+    before do
+      allow($stdout).to receive(:tty?).and_return(true)
+      allow(Tty).to receive(:width).and_return(40)
+    end
+
+    test_each([
+      ["both versions", "1" * 40, "2" * 40, "edge #{"1" * 12}... -> #{"2" * 13}..."],
+      ["the old version", "1" * 40, "2.0", "edge #{"1" * 25}... -> 2.0"],
+      ["the new version", "1.0", "2" * 40, "edge 1.0 -> #{"2" * 25}..."],
+      ["a version without an old version", "2" * 40, nil, "edge #{"2" * 32}..."],
+    ]) do |description, old_version, new_version, expected|
+      it "truncates #{description} to fit the terminal" do
+        expect(described_class.version_changes([version_change("edge", old_version, new_version)]))
+          .to eq([expected])
+      end
+    end
+
+    it "reserves space for download sizes and keeps columns aligned" do
+      allow(Tty).to receive(:width).and_return(50)
+
+      expect(described_class.version_changes([
+        version_change("edge", "1" * 40, "2" * 40),
+        version_change("testball", "1.0", "2.0", size: "500B"),
+      ])).to eq([
+        "edge      11111111111... -> 22222222222...",
+        "testball  1.0            -> 2.0             (500B)",
+      ])
+    end
+
+    test_each([
+      ["123.456.789,abcdef", "234.567.890,ghijkl", "edge 123.456.789... -> 234.567.890..."],
+      ["123.456.789", "234.567.890", "edge 123.456.789 -> 234.567.890"],
+      ["123.456.789,abcdef", nil, "edge 123.456.789..."],
+    ]) do |old_version, new_version, expected|
+      it "keeps at least 11 version characters even in a very narrow terminal" do
+        allow(Tty).to receive(:width).and_return(1)
+
+        expect(described_class.version_changes([version_change("edge", old_version, new_version)]))
+          .to eq([expected])
+      end
+    end
+
+    it "preserves versions that fit the terminal exactly" do
+      expect(described_class.version_changes([version_change("edge", "1" * 15, "2" * 16)]))
+        .to eq(["edge #{"1" * 15} -> #{"2" * 16}"])
+    end
+
+    it "preserves full versions when output is redirected" do
+      allow($stdout).to receive(:tty?).and_return(false)
+
+      expect(described_class.version_changes([version_change("edge", "1" * 40, "2" * 40)]))
+        .to eq(["edge #{"1" * 40} -> #{"2" * 40}"])
+    end
+
+    it "preserves full versions when the terminal width is unknown" do
+      allow(Tty).to receive(:width).and_return(0)
+
+      expect(described_class.version_changes([version_change("edge", "1" * 40, "2" * 40)]))
+        .to eq(["edge #{"1" * 40} -> #{"2" * 40}"])
+    end
+  end
+
   describe ".disk_usage_readable_size_unit" do
     it "returns size and unit for bytes" do
       expect(described_class.disk_usage_readable_size_unit(500)).to eq([500, "B"])
