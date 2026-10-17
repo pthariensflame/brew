@@ -8,7 +8,9 @@ RSpec.describe Homebrew::Attestation do
   let(:fake_gh_creds) { "fake-gh-api-token" }
   let(:fake_error_status) { instance_double(Process::Status, exitstatus: 1, termsig: nil) }
   let(:fake_auth_status) { instance_double(Process::Status, exitstatus: 4, termsig: nil) }
-  let(:cached_download) { "/fake/cached/download" }
+  let(:cached_download) { (mktmpdir/"bottle.tar.gz").tap { |path| path.write("bottle") } }
+  let(:fake_bottle_digest) { Digest::SHA256.hexdigest("bottle") }
+  let(:fake_subject) { { name: fake_bottle_filename.to_s, digest: { sha256: fake_bottle_digest } } }
   let(:fake_bottle_filename) do
     instance_double(Bottle::Filename, name: "fakebottle", version: "1.0",
    to_s: "fakebottle--1.0.faketag.bottle.tar.gz")
@@ -30,7 +32,7 @@ RSpec.describe Homebrew::Attestation do
                     stdout: JSON.dump([
                       { verificationResult: {
                         verifiedTimestamps: [{ timestamp: "2024-03-13T00:00:00Z" }],
-                        statement:          { subject: [{ name: fake_bottle_filename.to_s }] },
+                        statement:          { subject: [fake_subject] },
                       } },
                     ]))
   end
@@ -39,7 +41,7 @@ RSpec.describe Homebrew::Attestation do
                     stdout: JSON.dump([
                       { verificationResult: {
                         verifiedTimestamps: [{ timestamp: "2024-03-13T00:00:00Z" }],
-                        statement:          { subject: [{ name: "nonsense" }, { name: fake_bottle_filename.to_s }] },
+                        statement:          { subject: [{ name: "nonsense" }, fake_subject] },
                       } },
                     ]))
   end
@@ -50,7 +52,7 @@ RSpec.describe Homebrew::Attestation do
                       { verificationResult: {
                         verifiedTimestamps: [{ timestamp: "2024-03-13T00:00:00Z" }],
                         statement:          {
-                          subject: [{ name: "#{digest}--#{fake_bottle_filename}" }],
+                          subject: [fake_subject.merge(name: "#{digest}--#{fake_bottle_filename}")],
                         },
                       } },
                     ]))
@@ -60,7 +62,7 @@ RSpec.describe Homebrew::Attestation do
                     stdout: JSON.dump([
                       { verificationResult: {
                         verifiedTimestamps: [{ timestamp: "2024-03-15T00:00:00Z" }],
-                        statement:          { subject: [{ name: fake_bottle_filename.to_s }] },
+                        statement:          { subject: [fake_subject] },
                       } },
                     ]))
   end
@@ -220,6 +222,48 @@ RSpec.describe Homebrew::Attestation do
         .and_return(fake_result_json_resp)
 
       described_class.check_attestation fake_all_bottle, Homebrew::Attestation::HOMEBREW_CORE_REPO
+    end
+
+    context "when the subject name and digest match different artifacts" do
+      let(:fake_subject) do
+        { name: fake_bottle_filename.to_s, digest: { sha256: Digest::SHA256.hexdigest("other bottle") } }
+      end
+
+      before do
+        response = JSON.parse(fake_result_json_resp.stdout)
+        response.first.fetch("verificationResult").fetch("statement").fetch("subject") <<
+          { name: "other-bottle.tar.gz", digest: { sha256: fake_bottle_digest } }
+        allow(GitHub::API).to receive(:credentials).and_return(fake_gh_creds)
+        allow(described_class).to receive(:system_command!)
+          .and_return(instance_double(SystemCommand::Result, stdout: JSON.generate(response)))
+      end
+
+      it "rejects the attestation" do
+        expect do
+          described_class.check_attestation(fake_bottle, Homebrew::Attestation::HOMEBREW_CORE_REPO)
+        end.to raise_error(Homebrew::Attestation::InvalidAttestationError, /no attestation matches subject/)
+      end
+
+      it "rejects the attestation for an :all bottle" do
+        expect do
+          described_class.check_attestation(fake_all_bottle, Homebrew::Attestation::HOMEBREW_CORE_REPO)
+        end.to raise_error(Homebrew::Attestation::InvalidAttestationError, /no attestation matches subject/)
+      end
+    end
+
+    context "when an :all bottle's version is a prefix of another version" do
+      before do
+        allow(GitHub::API).to receive(:credentials).and_return(fake_gh_creds)
+        allow(described_class).to receive(:system_command!) { fake_result_json_resp }
+      end
+
+      it "rejects an attestation for a different version" do
+        fake_subject[:name] = "fakebottle--1.0.1.faketag.bottle.tar.gz"
+
+        expect do
+          described_class.check_attestation(fake_all_bottle, Homebrew::Attestation::HOMEBREW_CORE_REPO)
+        end.to raise_error(Homebrew::Attestation::InvalidAttestationError, /no attestation matches subject/)
+      end
     end
   end
 

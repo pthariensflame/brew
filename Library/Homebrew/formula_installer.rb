@@ -1594,7 +1594,6 @@ on_request: installed_on_request?, options:)
     bottle_install = !only_deps? && local_bottle_path.nil? && pour_bottle?(output_warning: true)
     # We skip bottle installs from local bottle paths, as these are done in CI
     # as part of the build lifecycle before attestations are produced.
-    verify_attestation = bottle_install && verify_bottle_attestation?
     bottle_download = @enqueued_bottle_download
     bottle_download = enqueue_bottle_download(stage: false) if bottle_download.nil? && bottle_install && @ran_prelude
 
@@ -1607,7 +1606,7 @@ on_request: installed_on_request?, options:)
     if bottle_install
       if bottle_download.nil?
         fetch_bottle_tab(enqueue: true)
-        check_attestation = verify_attestation && !downloadable_object.cached_download.exist?
+        check_attestation = verify_bottle_attestation?
       end
     else
       @formula = Homebrew::API::Formula.source_download_formula(formula) if formula.loaded_from_api?
@@ -1639,8 +1638,7 @@ on_request: installed_on_request?, options:)
     return if only_deps? || formula.local_bottle_path
 
     bottle_download = downloadable
-    check_attestation = verify_bottle_attestation? && !bottle_download.cached_download.exist?
-    download_queue.enqueue(bottle_download, check_attestation:, stage:)
+    download_queue.enqueue(bottle_download, check_attestation: verify_bottle_attestation?, stage:)
     bottle_download
   end
 
