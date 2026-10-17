@@ -12,6 +12,11 @@ module RuboCop
             reason:  "install4j distributions must include the unique ID number, e.g. " \
                      "`com.install4j.1234-5678-9012-3456`, to prevent matching other applications.",
           },
+          {
+            pattern: "com.todesktop.*",
+            reason:  "ToDesktop distributions must include the unique ID, e.g. " \
+                     "`com.todesktop.123456abcdefghi`, to prevent matching other applications.",
+          },
         ].freeze, T::Array[{ pattern: String, reason: String }])
 
         RESTRICT_ON_SEND = [:uninstall, :zap].freeze
