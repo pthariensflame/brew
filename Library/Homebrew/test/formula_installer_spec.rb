@@ -1157,6 +1157,83 @@ RSpec.describe FormulaInstaller do
 
       expect(deps.map(&:name)).to eq(%w[shared first-parent second-parent])
     end
+
+    context "with an outdated build dependency with a matching compatibility_version" do
+      let(:build_dep) { Dependency.new("homebrew-compatible-build-dependency", [:build]) }
+      let(:runtime_dep_formula) do
+        formula "homebrew-build-dependency-runtime-dependency" do
+          T.bind(self, T.class_of(Formula))
+          url "foo-1.0"
+        end
+      end
+      let(:f) do
+        formula "homebrew-keep-compatible-build-dependency" do
+          T.bind(self, T.class_of(Formula))
+          url "foo-1.0"
+        end
+      end
+      let(:build_bottle) { false }
+      let(:installer) { described_class.new(f, build_bottle:) }
+
+      before do
+        build_dep_formula = formula build_dep.name do
+          T.bind(self, T.class_of(Formula))
+          url "foo-1.0"
+        end
+        keg = instance_double(Keg, runtime_dependencies: [{ "full_name" => runtime_dep_formula.full_name }])
+        allow(build_dep_formula).to receive_messages(
+          compatibility_version: 1,
+          deps:                  [Dependency.new(runtime_dep_formula.name)],
+          any_installed_keg:     keg,
+        )
+        stub_formula_loader(build_dep_formula)
+        stub_formula_loader(runtime_dep_formula)
+        allow(build_dep).to receive(:satisfied?).and_return(false)
+        allow(build_dep).to receive(:satisfied?).with(minimum_compatibility_version: 1).and_return(true)
+        allow(installer).to receive_messages(effective_build_options_for: BuildOptions.new(Options.new, Options.new),
+                                             install_bottle_for?:         false)
+      end
+
+      it "keeps it and the dependencies it was built against" do
+        allow(f).to receive(:deps).and_return([build_dep])
+
+        expect(installer.expand_dependencies_for_formula(f)).to be_empty
+      end
+
+      it "upgrades it if a dependency it was built against is upgraded" do
+        allow(f).to receive(:deps).and_return([build_dep, Dependency.new(runtime_dep_formula.name)])
+
+        expect(installer.expand_dependencies_for_formula(f).map(&:name)).to include(build_dep.name)
+      end
+
+      it "keeps other compatible build dependencies if one is upgraded" do
+        other_build_dep = Dependency.new("homebrew-other-compatible-build-dependency", [:build])
+        other_build_dep_formula = formula other_build_dep.name do
+          T.bind(self, T.class_of(Formula))
+          url "foo-1.0"
+        end
+        allow(other_build_dep_formula).to receive_messages(
+          compatibility_version: 1,
+          any_installed_keg:     instance_double(Keg, runtime_dependencies: []),
+        )
+        stub_formula_loader(other_build_dep_formula)
+        allow(other_build_dep).to receive(:satisfied?).and_return(false)
+        allow(other_build_dep).to receive(:satisfied?).with(minimum_compatibility_version: 1).and_return(true)
+        allow(f).to receive(:deps).and_return([build_dep, other_build_dep, Dependency.new(runtime_dep_formula.name)])
+
+        expect(installer.expand_dependencies_for_formula(f).map(&:name)).not_to include(other_build_dep.name)
+      end
+
+      context "when building a bottle" do
+        let(:build_bottle) { true }
+
+        it "upgrades it" do
+          allow(f).to receive(:deps).and_return([build_dep])
+
+          expect(installer.expand_dependencies_for_formula(f).map(&:name)).to include(build_dep.name)
+        end
+      end
+    end
   end
 
   describe "versioned keg-only linking defaults" do

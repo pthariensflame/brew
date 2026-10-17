@@ -864,6 +864,13 @@ RSpec.describe Formulary do
         expect(formula.loaded_from_internal_api?).to be true
       end
 
+      it "returns a Formula with a compatibility_version" do
+        allow(Homebrew::API::Formula).to receive(:all_formulae)
+          .and_return formula_json_contents("compatibility_version" => 2)
+
+        expect(described_class.factory(formula_name).compatibility_version).to eq 2
+      end
+
       it "returns a Formula with no_linkage dependencies" do
         allow(Homebrew::API::Formula).to receive(:all_formulae)
           .and_return formula_json_contents("no_linkage_dependencies" => ["dep"])

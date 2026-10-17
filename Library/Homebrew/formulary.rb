@@ -252,6 +252,7 @@ module Formulary
       license formula_struct.license
       revision formula_struct.revision
       version_scheme formula_struct.version_scheme
+      compatibility_version formula_struct.compatibility_version
 
       if formula_struct.stable?
         stable do
