@@ -17,6 +17,17 @@ RSpec.describe RuboCop::Cop::Cask::DisallowedPatterns, :config do
     expect_no_corrections
   end
 
+  it "reports an offense when a quit ID is only the ToDesktop prefix and a wildcard" do
+    expect_offense(<<~CASK)
+      cask "foo" do
+        url "https://example.com/foo.zip"
+
+        uninstall quit: "com.todesktop.*"
+                        ^^^^^^^^^^^^^^^^^ ToDesktop distributions must include the unique ID, e.g. `com.todesktop.123456abcdefghi`, to prevent matching other applications.
+      end
+    CASK
+  end
+
   it "reports an offense for a disallowed pattern in a zap stanza" do
     expect_offense(<<~CASK)
       cask "foo" do
