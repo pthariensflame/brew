@@ -9,6 +9,66 @@ RSpec.describe UnpackStrategy::Tar do
   include_examples "UnpackStrategy::detect"
   include_examples "#extract", children: ["container"]
 
+  describe "#extract failures" do
+    subject(:strategy) { described_class.new(path) }
+
+    let(:unpack_dir) { mktmpdir/"unpacked" }
+    let(:disk_space_error) do
+      ErrorDuringExecution.new(["tar"], status: 2,
+                                        output: [[:stderr, "payload: Write failed: No space left on device\n"]])
+    end
+
+    it "reports the archive and destination when tar runs out of disk space" do
+      allow(strategy).to receive(:system_command!).and_raise(disk_space_error)
+
+      expect { strategy.extract(to: unpack_dir) }.to raise_error(ExtractionDiskSpaceError, <<~EOS)
+        Not enough disk space to extract:
+          #{path}
+        Free up space on the filesystems containing these directories:
+          #{unpack_dir}
+          #{strategy.temporary_directory}
+        Then try again.
+      EOS
+    end
+
+    it "preserves tar's original failure as the cause" do
+      allow(strategy).to receive(:system_command!).and_raise(disk_space_error)
+
+      expect { strategy.extract(to: unpack_dir) }.to raise_error(ExtractionDiskSpaceError) { |error|
+        expect(error.cause).to equal(disk_space_error)
+      }
+    end
+
+    it "handles an out-of-space failure returned by the extraction sandbox" do
+      allow(Sandbox).to receive(:isolate_operation?).and_return(true)
+      allow(Sandbox).to receive(:operation).and_raise(disk_space_error)
+
+      expect { strategy.extract(to: unpack_dir) }.to raise_error(ExtractionDiskSpaceError)
+    end
+
+    it "handles a native out-of-space error" do
+      allow(strategy).to receive(:system_command!).and_raise(Errno::ENOSPC)
+
+      expect { strategy.extract(to: unpack_dir) }.to raise_error(ExtractionDiskSpaceError)
+    end
+
+    it "does not misreport a corrupt archive as insufficient disk space" do
+      error = ErrorDuringExecution.new(["tar"], status: 2,
+                                                output: [[:stderr, "tar: Unrecognized archive format\n"]])
+      allow(strategy).to receive(:system_command!).and_raise(error)
+
+      expect { strategy.extract(to: unpack_dir) }.to raise_error { |raised|
+        expect(raised).to equal(error)
+      }
+    end
+
+    it "uses a stable locale for tar diagnostics" do
+      expect(strategy).to receive(:system_command!).with("tar", hash_including(env: { "LC_ALL" => "C" }))
+
+      strategy.extract(to: unpack_dir)
+    end
+  end
+
   it "keeps decompression intermediates in the configured temporary directory" do
     temporary_directory = mktmpdir
     unpack_dir = mktmpdir

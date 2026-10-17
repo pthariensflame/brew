@@ -333,6 +333,24 @@ RSpec.describe Bottle do
       bottle&.clear_cache
     end
 
+    it "keeps the cached bottle and cleans up when extraction runs out of space", :aggregate_failures do
+      content = (TEST_FIXTURE_DIR/"tarballs/testball-0.1.tbz").binread
+      bottle = cached_bottle(Digest::SHA256.hexdigest(content), content)
+      error = ErrorDuringExecution.new(["tar"], status: 2,
+                                                output: [[:stderr, "file: Write failed: No space left on device\n"]])
+      allow(UnpackStrategy).to receive(:detect) do |path, **options|
+        UnpackStrategy::Tar.new(path, temporary_directory: options.fetch(:temporary_directory)).tap do |strategy|
+          allow(strategy).to receive(:system_command!).and_raise(error)
+        end
+      end
+      expect(bottle).not_to receive(:fetch)
+
+      expect { bottle.stage_from_download_queue(bottle.cached_download, pour: true) }
+        .to raise_error(ExtractionDiskSpaceError)
+      expect(bottle.cached_download.binread).to eq(content)
+      expect(HOMEBREW_TEMP_CELLAR.children).to be_empty
+    end
+
     it "keeps a cached bottle matching its checksum that fails to extract", :aggregate_failures do
       content = "valid but unextractable"
       bottle = cached_bottle(Digest::SHA256.hexdigest(content), content)

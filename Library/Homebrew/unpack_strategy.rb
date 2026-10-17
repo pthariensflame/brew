@@ -198,6 +198,17 @@ module UnpackStrategy
     end
 
     extract_to_dir(unpack_dir, basename: Pathname(basename), verbose:)
+  rescue Errno::ENOSPC, ErrorDuringExecution => e
+    raise if e.is_a?(ErrorDuringExecution) && e.stderr.exclude?("No space left on device")
+
+    raise ExtractionDiskSpaceError, <<~EOS
+      Not enough disk space to extract:
+        #{path}
+      Free up space on the filesystems containing these directories:
+        #{unpack_dir}
+        #{temporary_directory}
+      Then try again.
+    EOS
   end
 
   sig {
