@@ -25,12 +25,24 @@ api_curlrc_args() {
   fi
 }
 
-api_time_cond_args() {
+# Keep conditional requests in sync with Homebrew::API.fetch_json_api_file in api.rb.
+api_conditional_args() {
   local cache_path="$1"
+  local etag_path="$2"
+  local json_url="$3"
 
   if [[ -s "${cache_path}" ]]
   then
-    echo "--time-cond"
-    echo "${cache_path}"
+    if [[ -n "${etag_path}" ]]
+    then
+      if [[ -s "${etag_path}" && -f "${etag_path}.url" && "$(<"${etag_path}.url")" == "${json_url}" ]]
+      then
+        echo "--etag-compare"
+        echo "${etag_path}"
+      fi
+    else
+      echo "--time-cond"
+      echo "${cache_path}"
+    fi
   fi
 }

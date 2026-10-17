@@ -56,6 +56,7 @@ module Homebrew
       retry_count = 0
       url = "#{Homebrew::EnvConfig.api_domain}/#{endpoint}"
       default_url = "#{HOMEBREW_API_DEFAULT_DOMAIN}/#{endpoint}"
+      primary_url = url
 
       if Homebrew.running_as_root_but_not_owned_by_root? &&
          (!target.exist? || target.empty?)
@@ -68,14 +69,13 @@ module Homebrew
         "--speed-time", ENV.fetch("HOMEBREW_CURL_SPEED_TIME"),
         # This is a Curl format token, not a Ruby one.
         # rubocop:disable Style/FormatStringToken
-        "--write-out", "%{stderr}HTTP status: %{http_code}"
+        "--write-out", "%{http_code}"
         # rubocop:enable Style/FormatStringToken
       ]
 
       insecure_download = DevelopmentTools.ca_file_substitution_required? ||
                           DevelopmentTools.curl_substitution_required?
       skip_download = skip_download?(target:, stale_seconds:)
-
       if enqueue
         unless skip_download
           require "download_queue"
@@ -87,22 +87,61 @@ module Homebrew
         return [{}, false]
       end
 
+      etag_path = Pathname("#{target}.etag")
+      etag_url_path = Pathname("#{etag_path}.url")
+      new_etag_path = Pathname("#{target}.etag.new")
+      new_target = Pathname("#{target}.new")
+
       json_data, from_payload_cache = begin
+        unless skip_download
+          require "lock_file"
+          # cmd/update.sh takes the same lock before replacing the body and validators.
+          download_lock ||= DownloadLock.new(target)
+          download_lock.lock_or_wait(quiet: Context.current.quiet?)
+          skip_download = skip_download?(target:, stale_seconds:)
+        end
         download_succeeded = T.let(false, T::Boolean)
+        unconditional_retry = T.let(false, T::Boolean)
         begin
           args = curl_args.dup
-          args.prepend("--time-cond", target.to_s) if target.exist? && !target.empty?
+          # Keep conditional requests in sync with utils/api.sh and cmd/update.sh.
+          use_etag = HOMEBREW_CURL_SUPPORTS_ETAGS && url == primary_url
+          if !unconditional_retry && target.exist? && !target.empty?
+            if use_etag && etag_path.exist? && !etag_path.empty? &&
+               etag_url_path.exist? && etag_url_path.read == url
+              args.prepend("--etag-compare", etag_path.to_s)
+            elsif !HOMEBREW_CURL_SUPPORTS_ETAGS && url == primary_url
+              args.prepend("--time-cond", target.to_s)
+            end
+          end
+          args.prepend("--etag-save", new_etag_path.to_s) if use_etag
           if insecure_download
             opoo DevelopmentTools.insecure_download_warning(endpoint)
             args.append("--insecure")
           end
           unless skip_download
+            FileUtils.rm_f([new_target, new_etag_path])
             ohai "Downloading #{url}" if $stdout.tty? && !Context.current.quiet?
             # Disable retries here, we handle them ourselves below.
-            Utils::Curl.curl_download(*args, url, to: target, retries: 0, show_error: false)
+            result = Utils::Curl.curl_download(*args, url, to: new_target, retries: 0, show_error: false,
+                                              print_stdout: false)
             download_succeeded = true
+            if new_target.exist?
+              FileUtils.rm_f([etag_path, etag_url_path])
+              FileUtils.mv(new_target, target)
+            end
+            if use_etag && new_etag_path.exist? && !new_etag_path.empty?
+              FileUtils.mv(new_etag_path, etag_path)
+              File.write(etag_url_path, url)
+            elsif etag_path.exist? && result&.stdout != "304"
+              FileUtils.rm_f([etag_path, etag_url_path])
+            end
           end
-        rescue ErrorDuringExecution
+        rescue ErrorDuringExecution => e
+          if e.exitstatus == 56 && args && (args.include?("--etag-compare") || args.include?("--time-cond"))
+            unconditional_retry = true
+            retry
+          end
           if url == default_url
             raise unless target.exist?
             raise if target.empty?
@@ -117,6 +156,8 @@ module Homebrew
           end
 
           opoo "#{target.basename}: update failed, falling back to cached version."
+        ensure
+          FileUtils.rm_f([new_target, new_etag_path]) unless skip_download
         end
 
         # Only refresh the cache mtime after a successful curl revalidation/download.
@@ -166,6 +207,8 @@ module Homebrew
       else
         [json_data, !skip_download]
       end
+    ensure
+      download_lock&.unlock
     end
 
     sig {
