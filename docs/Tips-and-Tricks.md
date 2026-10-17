@@ -227,6 +227,10 @@ sudo chown -R "${USER}" /usr/local/etc
 
 You can configure Homebrew to retrieve bottles and the JSON API from a caching proxy or mirror.
 
+API mirrors should preserve `ETag` headers: with curl 7.68.0 or later, Homebrew revalidates cached JSON using the ETag saved for that URL.
+Without a matching validator or when falling back to another API domain, Homebrew downloads a fresh response.
+Older curl versions use time-based checks on the configured API domain.
+
 For example, in JFrog's Artifactory, accessible at `https://artifacts.example.com`:
 
 - For the bottles, configure a new "remote" repository with `homebrew` as the "repository key" and `https://ghcr.io` (GitHub Packages) as the URL.

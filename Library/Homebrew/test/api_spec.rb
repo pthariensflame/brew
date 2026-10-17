@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "api"
+require "lock_file"
 require "openssl"
 
 RSpec.describe Homebrew::API do
@@ -106,6 +107,7 @@ RSpec.describe Homebrew::API do
     context "with a stale cached file" do
       let(:target) { cache_dir/"bar.json" }
       let(:etag_path) { Pathname("#{target}.etag") }
+      let(:etag_url_path) { Pathname("#{etag_path}.url") }
       let(:new_etag_path) { Pathname("#{target}.etag.new") }
       let(:curl_args) { [] }
 
@@ -113,6 +115,7 @@ RSpec.describe Homebrew::API do
         stub_const("HOMEBREW_CURL_SUPPORTS_ETAGS", true)
         target.write json
         FileUtils.touch(target, mtime: Time.now - 7200)
+        etag_url_path.write "#{Homebrew::EnvConfig.api_domain}/bar.json"
       end
 
       def stub_curl(status:, etag: "")
@@ -120,7 +123,7 @@ RSpec.describe Homebrew::API do
           curl_args.replace(args)
           File.write(args.fetch(args.index("--etag-save") + 1), etag) if etag && args.include?("--etag-save")
           to.write json if status == 200
-          SystemCommand::Result.new(["curl"], [[:stderr, "HTTP status: #{status}"]],
+          SystemCommand::Result.new(["curl"], [[:stdout, status.to_s]],
                                     instance_double(Process::Status, success?: true, exitstatus: 0),
                                     secrets: [])
         end
@@ -139,20 +142,19 @@ RSpec.describe Homebrew::API do
         expect(etag_path.read).to eq 'W/"new"'
       end
 
-      it "falls back to --time-cond and saves the ETag when none is saved" do
+      it "downloads a fresh body and saves the ETag when none is saved" do
+        etag_url_path.unlink
         stub_curl(status: 200, etag: 'W/"new"')
         fetch
-        expect(curl_args).to include("--time-cond", target.to_s)
-        expect(curl_args).not_to include("--etag-compare")
-        expect(etag_path.read).to eq 'W/"new"'
+        expect([curl_args.grep(/--(?:time-cond|etag-compare)/), etag_path.read, etag_url_path.read])
+          .to eq [[], 'W/"new"', "#{Homebrew::EnvConfig.api_domain}/bar.json"]
       end
 
-      it "falls back to --time-cond when the saved ETag is empty" do
+      it "downloads a fresh body when the saved ETag is empty" do
         etag_path.write ""
         stub_curl(status: 200, etag: 'W/"new"')
         fetch
-        expect(curl_args).to include("--time-cond", target.to_s)
-        expect(curl_args).not_to include("--etag-compare")
+        expect(curl_args).not_to include("--time-cond", "--etag-compare")
       end
 
       it "keeps the saved ETag, refreshes the mtime and leaves no temp file on a 304" do
@@ -172,6 +174,30 @@ RSpec.describe Homebrew::API do
         expect(etag_path.read).to eq 'W/"old"'
       end
 
+      it "preserves an in-progress ETag when using a fresh cached file" do
+        FileUtils.touch(target)
+        new_etag_path.write 'W/"new"'
+        fetch
+        expect(new_etag_path).to exist
+      end
+
+      test_each([false, true]) do |corrupt|
+        it "holds the shared download lock when refreshing a #{corrupt ? "corrupt fresh" : "stale"} cache" do
+          if corrupt
+            target.write json_invalid
+            FileUtils.touch(target)
+          end
+          lock = DownloadLock.new(target)
+          allow(Utils::Curl).to receive(:curl_download) do |*_, to:, **|
+            expect { lock.lock }.to raise_error(OperationInProgressError)
+            to.write json
+          end
+          fetch
+        ensure
+          lock&.unlock
+        end
+      end
+
       it "removes the saved ETag when a 200 carries none" do
         etag_path.write 'W/"old"'
         stub_curl(status: 200)
@@ -186,6 +212,69 @@ RSpec.describe Homebrew::API do
         expect(etag_path.read).to eq 'W/"old"'
       end
 
+      it "preserves the cached body, ETag and mtime after a partial download" do
+        etag_path.write 'W/"old"'
+        mtime = target.mtime
+        allow(described_class).to receive(:opoo)
+        allow(Utils::Curl).to receive(:curl_download) do |*args, to:, **|
+          to.write '{"partial":'
+          File.write(args.fetch(args.index("--etag-save") + 1), 'W/"partial"')
+          raise ErrorDuringExecution.new(["curl"], status: 18)
+        end
+
+        fetch
+
+        expect([target.read, etag_path.read, target.mtime, new_etag_path.exist?, Pathname("#{target}.new").exist?])
+          .to eq [json, 'W/"old"', mtime, false, false]
+      end
+
+      test_each([false, true]) do |supports_etags|
+        it "retries a receive error without conditions with ETag support #{supports_etags}" do
+          stub_const("HOMEBREW_CURL_SUPPORTS_ETAGS", supports_etags)
+          etag_path.write 'W/"old"'
+          requests = []
+          allow(Utils::Curl).to receive(:curl_download) do |*args, to:, **|
+            requests << args
+            if args.include?("--etag-compare") || args.include?("--time-cond")
+              raise ErrorDuringExecution.new(["curl"], status: 56)
+            end
+
+            to.write '{"foo":"updated"}'
+            SystemCommand::Result.new(["curl"], [[:stdout, "200"]],
+                                      instance_double(Process::Status, success?: true, exitstatus: 0),
+                                      secrets: [])
+          end
+
+          fetch
+
+          expect([requests.length, target.read, etag_path.exist?]).to eq [2, '{"foo":"updated"}', false]
+        end
+      end
+
+      it "ignores an ETag saved for a different API domain" do
+        etag_path.write 'W/"old"'
+        etag_url_path.write "https://mirror.example/api/bar.json"
+        stub_curl(status: 200, etag: 'W/"new"')
+        fetch
+        expect(curl_args).not_to include("--time-cond", "--etag-compare")
+      end
+
+      it "ignores an ETag whose origin is unknown" do
+        etag_path.write 'W/"old"'
+        etag_url_path.unlink
+        stub_curl(status: 200, etag: 'W/"new"')
+        fetch
+        expect(curl_args).not_to include("--time-cond", "--etag-compare")
+      end
+
+      it "keeps the saved ETag after a 304 with curl older than 7.68.0" do
+        stub_const("HOMEBREW_CURL_SUPPORTS_ETAGS", false)
+        etag_path.write 'W/"old"'
+        stub_curl(status: 304)
+        fetch
+        expect(etag_path).to exist
+      end
+
       it "uses only --time-cond and removes the saved ETag after a 200 when curl is older than 7.68.0" do
         stub_const("HOMEBREW_CURL_SUPPORTS_ETAGS", false)
         etag_path.write 'W/"old"'
@@ -196,8 +285,9 @@ RSpec.describe Homebrew::API do
         expect(etag_path).not_to exist
       end
 
-      it "uses only --time-cond on the fallback API domain" do
+      it "downloads unconditionally from the fallback API domain" do
         allow(Homebrew::EnvConfig).to receive(:api_domain).and_return("https://example.invalid/api")
+        etag_url_path.write "https://example.invalid/api/bar.json"
         etag_path.write 'W/"old"'
         requests = []
         allow(Utils::Curl).to receive(:curl_download) do |*args, to:, **|
@@ -205,13 +295,13 @@ RSpec.describe Homebrew::API do
           raise ErrorDuringExecution.new(["curl"], status: 1) if requests.length == 1
 
           to.write json
-          SystemCommand::Result.new(["curl"], [[:stderr, "HTTP status: 200"]],
+          SystemCommand::Result.new(["curl"], [[:stdout, "200"]],
                                     instance_double(Process::Status, success?: true, exitstatus: 0),
                                     secrets: [])
         end
         fetch
         expect(requests.fetch(0)).to include("--etag-compare", "--etag-save")
-        expect(requests.fetch(1)).to include("--time-cond", target.to_s)
+        expect(requests.fetch(1)).not_to include("--time-cond")
         expect(requests.fetch(1).grep(/etag/)).to be_empty
         expect(etag_path).not_to exist
       end

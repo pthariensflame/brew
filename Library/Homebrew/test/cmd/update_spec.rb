@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "lock_file"
 
 require "cmd/shared_examples/args_parse"
 require "cmd/update"
@@ -36,6 +37,7 @@ RSpec.describe Homebrew::Cmd::Update do
       FileUtils.ln_s repository_root/"Library/Homebrew/utils/#{name}.sh",
                      test_root/"Library/Homebrew/utils/#{name}.sh"
     end
+    FileUtils.ln_s repository_root/"Library/Homebrew/utils/lock_sh", test_root/"Library/Homebrew/utils/lock_sh"
   end
 
   it "stops Git from finding the enclosing repository" do
@@ -138,13 +140,15 @@ RSpec.describe Homebrew::Cmd::Update do
         fetch_api_file formula.jws.json "#{update_failed_file}"
       SH
       {
-        "HOMEBREW_API_DEFAULT_DOMAIN" => "https://formulae.example/api",
-        "HOMEBREW_API_DOMAIN"         => nil,
-        "HOMEBREW_CACHE"              => (test_root/"cache").to_s,
-        "HOMEBREW_CURL_SPEED_LIMIT"   => "100",
-        "HOMEBREW_CURL_SPEED_TIME"    => "5",
-        "HOMEBREW_LIBRARY"            => (test_root/"Library").to_s,
-        "HOMEBREW_USER_AGENT_CURL"    => "Homebrew/test",
+        "HOMEBREW_API_DEFAULT_DOMAIN"  => "https://formulae.example/api",
+        "HOMEBREW_API_DOMAIN"          => nil,
+        "HOMEBREW_CACHE"               => (test_root/"cache").to_s,
+        "HOMEBREW_CURL_SPEED_LIMIT"    => "100",
+        "HOMEBREW_CURL_SPEED_TIME"     => "5",
+        "HOMEBREW_CURL_SUPPORTS_ETAGS" => nil,
+        "HOMEBREW_LIBRARY"             => (test_root/"Library").to_s,
+        "HOMEBREW_PREFIX"              => HOMEBREW_PREFIX.to_s,
+        "HOMEBREW_USER_AGENT_CURL"     => "Homebrew/test",
       },
     )
 
@@ -161,11 +165,13 @@ RSpec.describe Homebrew::Cmd::Update do
     let(:update_failed_file) { test_root/"update_failed.txt" }
 
     def fetch_with_curl_response(status_code:, body: "", etag: "", saved_etag: '"old"', curl_supports_etags: "1",
-                                 api_domain: nil)
+                                 api_domain: nil, saved_url: nil, exit_code: 0)
       setup_update_utils
       cache_path.dirname.mkpath
       cache_path.write "cached"
+      args_file.write ""
       etag_path.write saved_etag if saved_etag
+      Pathname("#{etag_path}.url").write saved_url || "#{api_domain || "https://formulae.example/api"}/formula.jws.json"
 
       _stdout, stderr, status = run_update_shell(
         <<~SH,
@@ -185,7 +191,7 @@ RSpec.describe Homebrew::Cmd::Update do
             [[ -n "${etag_save}" ]] && printf '%s' '#{etag}' > "${etag_save}"
             [[ -n '#{body}' ]] && printf '%s' '#{body}' > "${output}"
             printf '%s' '#{status_code}'
-            return 0
+            return #{exit_code}
           }
           fetch_api_file formula.jws.json "#{update_failed_file}"
         SH
@@ -197,6 +203,7 @@ RSpec.describe Homebrew::Cmd::Update do
           "HOMEBREW_CURL_SPEED_TIME"     => "5",
           "HOMEBREW_CURL_SUPPORTS_ETAGS" => curl_supports_etags,
           "HOMEBREW_LIBRARY"             => (test_root/"Library").to_s,
+          "HOMEBREW_PREFIX"              => HOMEBREW_PREFIX.to_s,
           "HOMEBREW_USER_AGENT_CURL"     => "Homebrew/test",
         },
       )
@@ -238,13 +245,10 @@ RSpec.describe Homebrew::Cmd::Update do
       )
     end
 
-    it "falls back to the time condition without a saved ETag" do
+    it "downloads a fresh body without a saved ETag" do
       expect(fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"', saved_etag: nil)).to eq(
         success:   true,
-        curl_args: [
-          ["--etag-save", new_etag_path.to_s],
-          ["--time-cond", cache_path.to_s],
-        ],
+        curl_args: [["--etag-save", new_etag_path.to_s]],
         body:      "fresh",
         etag:      '"new"',
         temp_etag: false,
@@ -261,7 +265,7 @@ RSpec.describe Homebrew::Cmd::Update do
       )
     end
 
-    it "uses only the time condition on the fallback API domain" do
+    it "downloads unconditionally from the fallback API domain" do
       result = fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"',
                                         api_domain: "https://mirror.example/api")
       expect(result).to eq(
@@ -269,16 +273,41 @@ RSpec.describe Homebrew::Cmd::Update do
         curl_args: [
           ["--etag-save", new_etag_path.to_s],
           ["--etag-compare", etag_path.to_s],
-          ["--time-cond", cache_path.to_s],
         ],
         body:      "fresh",
         etag:      nil,
         temp_etag: false,
       )
     end
+
+    it "preserves the cached body and ETag after a partial download" do
+      expect(fetch_with_curl_response(status_code: 200, body: "partial", etag: '"partial"', exit_code: 18)
+        .except(:curl_args)).to eq(success: false, body: "cached", etag: '"old"', temp_etag: false)
+    end
+
+    it "ignores an ETag saved for a different API domain" do
+      expect(fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"',
+                                      saved_url: "https://mirror.example/api/formula.jws.json")[:curl_args])
+        .to eq [["--etag-save", new_etag_path.to_s]]
+      expect(Pathname("#{etag_path}.url").read).to eq "https://formulae.example/api/formula.jws.json"
+    end
+
+    it "keeps the saved ETag after a 304 with curl older than 7.68.0" do
+      expect(fetch_with_curl_response(status_code: 304, curl_supports_etags: nil).except(:curl_args)).to eq(
+        success: true, body: "cached", etag: '"old"', temp_etag: false,
+      )
+    end
+
+    it "does not overwrite a cache being refreshed by Ruby" do
+      DownloadLock.new(cache_path).with_lock do
+        expect(fetch_with_curl_response(status_code: 200, body: "fresh", etag: '"new"').except(:curl_args)).to eq(
+          success: false, body: "cached", etag: '"old"', temp_etag: false,
+        )
+      end
+    end
   end
 
-  it "detects whether curl supports ETag revalidation" do
+  it "redetects curl ETag support when the flag is inherited" do
     setup_update_utils
 
     stdout, stderr, status = run_update_shell(
@@ -288,13 +317,15 @@ RSpec.describe Homebrew::Cmd::Update do
         HOMEBREW_CURL=curl
         for version in 7.41.0 7.67.0 7.68.0 8.7.1
         do
-          unset HOMEBREW_CURL_SUPPORTS_ETAGS
           curl() { echo "curl ${version} (x86_64-apple-darwin) libcurl/${version}"; }
           setup-user-agents
           [[ -n "${HOMEBREW_CURL_SUPPORTS_ETAGS}" ]] && echo "${version}: yes" || echo "${version}: no"
         done
       SH
-      { "HOMEBREW_LIBRARY" => (test_root/"Library").to_s },
+      {
+        "HOMEBREW_CURL_SUPPORTS_ETAGS" => "1",
+        "HOMEBREW_LIBRARY"             => (test_root/"Library").to_s,
+      },
     )
 
     expect([status.success?, stderr, stdout]).to eq(
@@ -398,8 +429,10 @@ RSpec.describe Homebrew::Cmd::Update do
     %w[
       packages.arm64_tahoe.jws.json
       packages.arm64_tahoe.jws.json.etag
+      packages.arm64_tahoe.jws.json.etag.url
       packages.arm64_sequoia.jws.json
       packages.arm64_sequoia.jws.json.etag
+      packages.arm64_sequoia.jws.json.etag.url
     ].each { |name| (api_internal/name).write "x" }
 
     _stdout, stderr, status = run_update_shell(
@@ -436,7 +469,7 @@ RSpec.describe Homebrew::Cmd::Update do
 
     expect([status.success?, stderr]).to eq([true, ""])
     expect(api_internal.children.map { |path| path.basename.to_s }.sort).to eq(
-      %w[packages.arm64_tahoe.jws.json packages.arm64_tahoe.jws.json.etag],
+      %w[packages.arm64_tahoe.jws.json packages.arm64_tahoe.jws.json.etag packages.arm64_tahoe.jws.json.etag.url],
     )
   end
 
