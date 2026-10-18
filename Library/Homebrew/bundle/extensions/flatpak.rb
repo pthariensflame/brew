@@ -413,7 +413,7 @@ module Homebrew
           successes = cleanup_each!(flatpaks) do |flatpak_name|
             Kernel.system("flatpak", "uninstall", "-y", "--system", flatpak_name) == true
           end
-          puts "Uninstalled #{successes} flatpak#{"s" if successes != 1}"
+          puts "Uninstalled #{Utils.pluralize(package_description, successes, include_count: true)}"
         end
       end
 
