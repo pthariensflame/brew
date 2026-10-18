@@ -185,6 +185,7 @@ RSpec.describe Formulary do
           license "MIT"
           url "https://example.com/no-linkage-round-trip-1.0.tar.gz"
           depends_on "shared" => :no_linkage
+          depends_on "runtime"
 
           on_macos do
             depends_on "platform" => :no_linkage
@@ -192,6 +193,8 @@ RSpec.describe Formulary do
           on_linux do
             depends_on "platform"
           end
+          depends_on "multi" => [:build, :test]
+          depends_on "runtime" => [:build, :test]
 
           head do
             url "https://example.com/no-linkage-round-trip.git", branch: "main"
@@ -210,7 +213,10 @@ RSpec.describe Formulary do
 
     before do
       stub_const("OnSystem::VALID_OS_ARCH_TAGS", [mac_tag, linux_tag])
-      allow(CoreTap.instance).to receive(:git_head).and_return("0" * 40)
+      allow(Homebrew::API).to receive_messages(formula_names: [formula_name], formula_aliases: {},
+                                               formula_renames: {})
+      allow(CoreTap.instance).to receive_messages(git_head: "0" * 40, tap_migrations: {})
+      allow(CoreCaskTap.instance).to receive(:tap_migrations).and_return({})
       allow(DevelopmentTools).to receive_messages(needs_libc_formula?: false, needs_compiler_formula?: false)
       formula_path.dirname.mkpath
       formula_path.write formula_content
@@ -218,7 +224,7 @@ RSpec.describe Formulary do
 
     test_each([:arm64_sequoia, :x86_64_linux].product([:stable, :head],
                                                       [:public, :internal])) do |(tag_symbol, spec, format)|
-      it "preserves #{spec} declarations through the #{format} API on #{tag_symbol}" do
+      it "preserves #{spec} declarations through the #{format} API on #{tag_symbol}", :aggregate_failures do
         payload = json
         tag = (tag_symbol == :arm64_sequoia) ? mac_tag : linux_tag
         Homebrew::SimulateSystem.with_tag(tag) do
@@ -238,6 +244,7 @@ RSpec.describe Formulary do
 
           expect(restored.declared_deps.map { |dep| [dep.name, dep.tags] })
             .to eq(source.declared_deps.map { |dep| [dep.name, dep.tags] })
+          expect(restored.to_hash.slice(*source.dependencies_hash.keys)).to eq(source.dependencies_hash)
         end
       end
     end

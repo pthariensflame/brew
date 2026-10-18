@@ -247,18 +247,18 @@ module Homebrew
         sig { params(deps_hash: DependencyHash).returns(T::Array[FormulaStruct::DependsOnArgs]) }
         def process_dependencies(deps_hash)
           no_linkage_names = deps_hash.fetch("no_linkage_dependencies", [])
-          dependencies = deps_hash.fetch("dependencies", []).map do |dep|
+          dependencies = deps_hash.fetch("dependencies", []).uniq.map do |dep|
             next dep unless no_linkage_names.include?(dep)
 
             { dep => :no_linkage }
           end
-          dependencies + [:build, :test, :recommended, :optional].filter_map do |type|
-            deps_hash["#{type}_dependencies"]&.map do |dep|
-              next { dep => type } unless no_linkage_names.include?(dep)
+          types = [:build, :test, :recommended, :optional]
+          dependencies + types.flat_map { |type| deps_hash.fetch("#{type}_dependencies", []) }.uniq.map do |dep|
+            tags = types.select { |type| deps_hash.fetch("#{type}_dependencies", []).include?(dep) }
+            tags << :no_linkage if no_linkage_names.include?(dep)
 
-              { dep => [type, :no_linkage] }
-            end
-          end.flatten(1)
+            { dep => (tags.one? ? tags.fetch(0) : tags) }
+          end
         end
 
         sig { params(requirements_array: RequirementsArray, spec: Symbol).returns(T::Array[FormulaStruct::DependsOnArgs]) }

@@ -236,6 +236,57 @@ RSpec.describe Homebrew::API::Formula::FormulaStructGenerator do
     expect(output).to eq dependency_args
   end
 
+  describe "::process_dependencies" do
+    it "combines build and test tags into one dependency" do
+      expect(described_class.process_dependencies({
+        "build_dependencies" => ["foo"],
+        "test_dependencies"  => ["foo"],
+      })).to eq [{ "foo" => [:build, :test] }]
+    end
+
+    it "appends no_linkage to combined dependency tags" do
+      expect(described_class.process_dependencies({
+        "build_dependencies"      => ["foo"],
+        "test_dependencies"       => ["foo"],
+        "no_linkage_dependencies" => ["foo"],
+      })).to eq [{ "foo" => [:build, :test, :no_linkage] }]
+    end
+
+    it "preserves runtime dependencies alongside combined build and test tags" do
+      expect(described_class.process_dependencies({
+        "dependencies"       => ["foo"],
+        "build_dependencies" => ["foo"],
+        "test_dependencies"  => ["foo"],
+      })).to eq ["foo", { "foo" => [:build, :test] }]
+    end
+
+    it "preserves no_linkage on runtime and tagged dependencies" do
+      expect(described_class.process_dependencies({
+        "dependencies"            => ["foo"],
+        "test_dependencies"       => ["foo"],
+        "no_linkage_dependencies" => ["foo"],
+      })).to eq [{ "foo" => :no_linkage }, { "foo" => [:test, :no_linkage] }]
+    end
+
+    it "preserves recommended and no_linkage tags" do
+      expect(described_class.process_dependencies({
+        "recommended_dependencies" => ["foo"],
+        "no_linkage_dependencies"  => ["foo"],
+      })).to eq [{ "foo" => [:recommended, :no_linkage] }]
+    end
+
+    it "preserves first appearance and uses a fixed tag order" do
+      expect(described_class.process_dependencies({
+        "optional_dependencies"    => ["multi", "optional"],
+        "recommended_dependencies" => ["multi", "recommended"],
+        "test_dependencies"        => ["multi", "test"],
+        "build_dependencies"       => ["build", "multi"],
+        "dependencies"             => ["runtime"],
+      })).to eq ["runtime", { "build" => :build }, { "multi" => [:build, :test, :recommended, :optional] },
+                 { "test" => :test }, { "recommended" => :recommended }, { "optional" => :optional }]
+    end
+  end
+
   specify "::process_uses_from_macos" do
     output = described_class.process_uses_from_macos(symbolized_dependency_hash)
     expect(output).to eq uses_from_macos_args
