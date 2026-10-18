@@ -12,6 +12,7 @@ require "utils/output"
 require "utils/path"
 require "api_hashable"
 require "trust"
+require "tmpdir"
 
 module Cask
   # An instance of a cask.
@@ -48,6 +49,31 @@ module Cask
 
     sig { returns(T.nilable(Pathname)) }
     attr_accessor :download
+
+    sig { params(temp: T.nilable(Pathname)).void }
+    attr_writer :temp
+
+    # Private temporary storage for the current cask lifecycle operation.
+    # @api internal
+    sig { returns(Pathname) }
+    def temp
+      @temp ||= Pathname(Dir.mktmpdir("cask-#{token}-", HOMEBREW_TEMP))
+    end
+
+    # Retain files on failure so an incomplete restoration cannot lose data.
+    # @api internal
+    sig { params(retain: T::Boolean).void }
+    def cleanup_temp(retain: false)
+      temporary = @temp
+      @temp = nil
+      return unless temporary&.exist?
+
+      if retain
+        ::Utils::Output.opoo "Temporary files retained at:\n#{temporary}"
+      else
+        FileUtils.remove_entry_secure(temporary)
+      end
+    end
 
     sig { returns(T::Boolean) }
     attr_accessor :allow_reassignment
@@ -111,6 +137,7 @@ module Cask
       @api_source = api_source
       @language_evaluator = T.let(nil, T.nilable(T.proc.params(languages: T::Array[String]).returns(T.nilable(String))))
       @loader = loader
+      @temp = T.let(nil, T.nilable(Pathname))
       # Sorbet has trouble with bound procs assigned to instance variables:
       # https://github.com/sorbet/sorbet/issues/6843
       @block = T.let(block, T.untyped)

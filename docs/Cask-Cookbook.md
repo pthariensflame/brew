@@ -652,6 +652,12 @@ The runtime steps DSL retains compatibility helpers for `token`, `name`, `arch`,
 
 Content, replacements, command arguments and command environments may use fixed install-time tokens. These include `{{HOMEBREW_BREW_FILE}}`, `{{HOMEBREW_CELLAR}}`, `{{HOMEBREW_PREFIX}}`, `{{token}}`, `{{name}}`, `{{arch}}`, `{{user}}`, `{{staged_path}}`, `{{appdir}}`, `{{caskroom_path}}`, `{{temp}}`, `{{version}}`, `{{version.major}}` and `{{version.major_minor}}`. `{{name}}` is retained for compatibility; prefer `{{token}}`. `{{arch}}` expands to the value the cask's `arch` stanza selected for the current architecture, and to an empty string when the cask has no matching value. Any other `{{...}}` is left verbatim. For example: `write_file "settings.conf", "application = {{appdir}}/Example.app"`.
 
+`{{temp}}` and `base: :temp` use a private, uniquely created directory with permissions `0700`, shared across the phases of one cask upgrade or reinstall so backups can be restored by a later phase.
+Successful `move` steps into this directory record expected backups; a later `move` from a missing backup fails even when guarded by `if_path_exists`.
+Homebrew removes this directory after a successful operation; on failure, it retains the directory and reports its location for recovery.
+Separate uninstall and install commands do not share this directory.
+Commands' temporary environment variables still point to the sandbox's disposable directory for each phase.
+
 {% endraw %}
 
 ### Stanza: `generate_completions_from_executable`

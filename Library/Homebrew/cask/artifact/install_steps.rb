@@ -65,6 +65,7 @@ module Cask
             "staged_path"   => cask.staged_path.to_s,
             "caskroom_path" => cask.caskroom_path.to_s,
             "home"          => Dir.home,
+            "temp"          => cask.temp.to_s,
             "config"        => cask.config.to_json,
           },
           "phase"   => phase.to_s,
