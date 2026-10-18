@@ -93,6 +93,7 @@ module Utils
     coder = JSON::Coder.new do |object|
       case object
       when Exception then child_error_hash(object)
+      when Pathname then object.to_s
       else object
       end
     end

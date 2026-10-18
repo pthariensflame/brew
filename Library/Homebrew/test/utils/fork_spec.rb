@@ -46,6 +46,19 @@ RSpec.describe Utils do
         )
       end
     end
+
+    it "preserves an ErrorDuringExecution with a Pathname command" do
+      error = ErrorDuringExecution.new([Pathname("/usr/bin/false"), "arg"], status: 1)
+
+      IO.pipe do |reader, writer|
+        described_class.report_forked_child_error(writer, error)
+
+        expect(described_class.rewrite_child_error(JSON.parse(reader.read))).to have_attributes(
+          class: ErrorDuringExecution,
+          cmd:   ["/usr/bin/false", "arg"],
+        )
+      end
+    end
   end
 
   describe "#safe_fork" do
