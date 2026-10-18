@@ -3091,6 +3091,21 @@ class Formula
     Checksum.new(Digest::SHA256.file(path).hexdigest) if path.exist?
   end
 
+  # API generation requires every patch checksum; other metadata consumers can omit unreadable patches.
+  sig { returns(T::Hash[String, String]) }
+  def local_patch_checksums
+    [stable, head].compact.flat_map do |spec|
+      (spec.patches + spec.resources.values.flat_map(&:patches)).grep(LocalPatch).filter_map do |patch|
+        [patch.file.to_s, Digest::SHA256.hexdigest(patch.contents)]
+      rescue ArgumentError, SystemCallError => e
+        raise if Formula.generating_hash?
+
+        opoo "#{full_name}: cannot checksum #{patch.file}: #{e}"
+        nil
+      end
+    end.to_h
+  end
+
   sig { params(dependables: T::Hash[Symbol, T.untyped]).returns(T::Array[T::Hash[Symbol, T.untyped]]) }
   def merge_spec_dependables(dependables)
     # We have a hash of specs names (stable/head) to dependency lists.
@@ -3126,6 +3141,7 @@ class Formula
       },
       "urls"                            => urls_hash,
       "patches"                         => serialized_patches,
+      "local_patch_checksums"           => local_patch_checksums,
       "revision"                        => revision,
       "version_scheme"                  => version_scheme,
       "compatibility_version"           => compatibility_version,
