@@ -184,14 +184,14 @@ module Homebrew
           packages - kept_extensions
         end
 
-        sig { params(extensions: T::Array[String]).void }
-        def cleanup!(extensions)
-          vscode = package_manager_executable
-          return if vscode.nil?
+        sig { override.params(_executable: Pathname).returns(T::Hash[String, String]) }
+        def package_manager_env(_executable)
+          {}
+        end
 
-          cleanup_each!(extensions) do |extension|
-            Kernel.system(vscode.to_s, "--uninstall-extension", extension) == true
-          end
+        sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
+        def uninstall_package!(name, executable: Pathname.new(""))
+          Kernel.system(executable.to_s, "--uninstall-extension", name) == true
         end
       end
     end

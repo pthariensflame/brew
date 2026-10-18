@@ -529,7 +529,8 @@ RSpec.describe Homebrew::Cmd::Bundle::CleanupSubcommand do
       allow(described_class).to receive_messages(casks_to_uninstall: [],
                                                  formulae_to_uninstall: [], taps_to_untap: [])
       allow(Homebrew::Bundle::VscodeExtension).to receive(:cleanup_items).and_return([])
-      allow(Homebrew::Bundle::Flatpak).to receive(:cleanup_items).and_return(%w[org.gnome.Calculator])
+      allow(Homebrew::Bundle::Flatpak).to receive_messages(cleanup_items:              %w[org.gnome.Calculator],
+                                                           package_manager_executable: Pathname("flatpak"))
     end
 
     it "uninstalls flatpaks" do
