@@ -241,7 +241,10 @@ module Homebrew
       sig { params(items: T::Array[String]).void }
       def self.cleanup!(items)
         executable = package_manager_executable
-        return if executable.nil?
+        if executable.nil?
+          ofail "Failed to uninstall #{banner_name}: executable not found" unless items.empty?
+          return
+        end
 
         successes = with_env(package_manager_env(executable)) do
           items.count do |item|

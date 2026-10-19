@@ -134,6 +134,26 @@ RSpec.describe Homebrew::Bundle::Go do
         .to eql(%w[github.com/golangci/golangci-lint/v2/cmd/golangci-lint])
     end
 
+    it "reports a missing executable when removals are queued" do
+      Homebrew.failed = false
+      allow(described_class).to receive(:package_manager_executable).and_return(nil)
+
+      expect do
+        described_class.cleanup!(["example.com/tools/example"])
+      end.to(
+        change(Homebrew, :failed?).from(false).to(true)
+          .and(output(/Failed to remove Go executables: go executable not found/).to_stderr),
+      )
+    end
+
+    it "does not report a missing executable when no removals are queued" do
+      allow(described_class).to receive(:package_manager_executable).and_return(nil)
+
+      expect do
+        described_class.cleanup!([])
+      end.to(output("").to_stderr.and(output("").to_stdout))
+    end
+
     it "removes binaries by their literal names" do
       binary = "/Users/test/go/bin/cr;ush $(touch pwned)"
       allow(described_class).to receive(:`).and_raise("Shell execution is not permitted")

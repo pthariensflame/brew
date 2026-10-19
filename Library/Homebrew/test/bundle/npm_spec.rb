@@ -225,6 +225,25 @@ RSpec.describe Homebrew::Bundle::Npm do
         .and_return(Pathname("/usr/bin/false"))
     end
 
+    it "reports a missing executable when removals are queued" do
+      allow(described_class).to receive(:package_manager_executable).and_return(nil)
+
+      expect do
+        described_class.cleanup!(["example"])
+      end.to(
+        change(Homebrew, :failed?).from(false).to(true)
+          .and(output(/Failed to uninstall npm packages: executable not found/).to_stderr),
+      )
+    end
+
+    it "does not report a missing executable when no removals are queued" do
+      allow(described_class).to receive(:package_manager_executable).and_return(nil)
+
+      expect do
+        described_class.cleanup!([])
+      end.to(output("").to_stderr.and(output("").to_stdout))
+    end
+
     it "reports a failed uninstall command" do
       expect do
         described_class.cleanup!(["example"])
