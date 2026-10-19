@@ -4,6 +4,7 @@
 require "simulate_system"
 require "system_command"
 require "utils/output"
+require "digest"
 
 module Homebrew
   # Declarative install steps that can be serialised through the JSON APIs.
@@ -1024,6 +1025,11 @@ module Homebrew
           else
             FileUtils.mv source, target, force: step["force"] == true
           end
+          if (marker = temporary_backup_marker(destination))
+            marker.dirname.mkpath
+            FileUtils.touch marker
+          end
+          FileUtils.rm_f marker if (marker = temporary_backup_marker(source))
         when "move_children", "move_contents"
           source = resolve_path(step_path(step, "source"))
           target = resolve_path(step_path(step, "target"))
@@ -1215,8 +1221,27 @@ module Homebrew
 
       sig { params(step: Step).returns(T::Boolean) }
       def step_guards_match?(step)
+        if step["type"] == "move" && context_value(:temp)
+          source = resolve_path(step_path(step, "source"))
+          if temporary_backup_marker(source)&.exist? && !source.exist? && !source.symlink?
+            raise "Expected cask backup is missing:\n#{source}"
+          end
+        end
+
         guards = T.cast(step["guards"], T.nilable(PathSpecs))
         guards.nil? || guards.all? { |guard| guard_matches?(guard) }
+      end
+
+      sig { params(path: Pathname).returns(T.nilable(Pathname)) }
+      def temporary_backup_marker(path)
+        temporary = context_value(:temp)
+        return unless temporary
+
+        directory = Pathname(temporary.to_s).expand_path
+        path = path.expand_path
+        return unless path.ascend.include?(directory)
+
+        directory/".homebrew-backups"/Digest::SHA256.hexdigest(path.to_s)
       end
 
       sig { params(guard: PathSpec).returns(T::Boolean) }
@@ -1586,7 +1611,7 @@ module Homebrew
         when "home"
           context_value(:home) ? context_path(base) : Pathname(Dir.home)
         when "temp"
-          HOMEBREW_TEMP
+          context_value(:temp) ? context_path(base) : HOMEBREW_TEMP
         when "homebrew_prefix"
           HOMEBREW_PREFIX
         when "formula_pkgetc"

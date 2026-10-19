@@ -388,6 +388,7 @@ module Cask
       binaries:, force:, require_sha:, quit:, skip_cask_deps:, verbose:, download_queue:,
       new_cask_installer: nil
     )
+      completed = false
       start_time = Time.now
       odebug "Started upgrade process for Cask #{old_cask}"
       old_config = old_cask.config
@@ -423,6 +424,7 @@ module Cask
       old_signing_identities = T.let({}, T::Hash[String, T.nilable(Quarantine::SigningIdentity)])
       old_user_approved = T.let({}, T::Hash[String, T::Boolean])
       old_unquarantined = T.let({}, T::Hash[String, T::Boolean])
+      old_cask.temp = new_cask.temp
 
       begin
         oh1 "Upgrading #{Formatter.identifier(old_cask)}"
@@ -520,6 +522,10 @@ module Cask
 
       end_time = Time.now
       Homebrew.messages.package_installed(new_cask.token, end_time - start_time)
+      completed = true
+    ensure
+      new_cask.cleanup_temp(retain: !completed)
+      old_cask.temp = nil
     end
   end
 end

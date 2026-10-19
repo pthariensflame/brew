@@ -175,6 +175,7 @@ module Cask
 
     sig { void }
     def install
+      completed = false
       raise CaskError, "Download failed for #{@cask}." if download_failed?
 
       start_time = Time.now
@@ -214,6 +215,7 @@ on_request: true)
       puts summary
       end_time = Time.now
       Homebrew.messages.package_installed(@cask.token, end_time - start_time)
+      completed = true
     rescue => e
       begin
         restore_backup
@@ -221,6 +223,8 @@ on_request: true)
         purge_staged_download
       end
       raise e
+    ensure
+      @cask.cleanup_temp(retain: !completed)
     end
 
     sig { void }
@@ -625,6 +629,7 @@ on_request: true)
 
     sig { params(successor: T.nilable(Cask)).void }
     def uninstall(successor: nil)
+      completed = false
       load_installed_caskfile!
       oh1 "Uninstalling Cask #{Formatter.identifier(@cask)}"
       if !reinstall? && !upgrade? && @installed_uninstall_artifacts_missing && artifacts.empty?
@@ -641,6 +646,9 @@ on_request: true)
       end
       purge_versioned_files
       purge_caskroom_path if force?
+      completed = true
+    ensure
+      @cask.cleanup_temp(retain: !completed) if !reinstall? && !upgrade?
     end
 
     sig { void }
@@ -768,6 +776,7 @@ on_request: true)
 
     sig { void }
     def zap
+      completed = false
       load_installed_caskfile!
       oh1 "Zapping Cask #{Formatter.identifier(@cask)}"
       zap_stanzas = @cask.artifacts.grep(Artifact::Zap)
@@ -775,6 +784,9 @@ on_request: true)
       uninstall_artifacts(clear: true, zap_stanzas:)
       ohai "Removing all staged versions of Cask '#{@cask}'"
       purge_caskroom_path
+      completed = true
+    ensure
+      @cask.cleanup_temp(retain: !completed) if !reinstall? && !upgrade?
     end
 
     sig { returns(T.nilable(Pathname)) }
@@ -993,6 +1005,7 @@ on_request: true)
     # load the same cask file that was used for installation, if possible
     sig { void }
     def load_installed_caskfile!
+      previous_cask = @cask
       Migrator.migrate_if_needed(@cask)
 
       installed_caskfile = @cask.installed_caskfile
@@ -1050,6 +1063,11 @@ on_request: true)
       recovered_cask = CaskLoader.recover_from_installed_caskfile(installed_caskfile, tab:, fallback_cask: @cask)
       # otherwise we default to the current cask
       @cask = recovered_cask if recovered_cask
+    ensure
+      if previous_cask
+        @cask.temp = previous_cask.temp
+        previous_cask.temp = nil if !reinstall? && !upgrade? && !@cask.equal?(previous_cask)
+      end
     end
 
     private

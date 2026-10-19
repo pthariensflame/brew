@@ -39,6 +39,9 @@ module Cask
     sig { returns(Pathname) }
     attr_reader :home
 
+    sig { returns(Pathname) }
+    attr_reader :temp
+
     sig { returns(Config) }
     attr_reader :config
 
@@ -51,6 +54,7 @@ module Cask
       @staged_path = T.let(Pathname(context.fetch("staged_path")), Pathname)
       @caskroom_path = T.let(Pathname(context.fetch("caskroom_path")), Pathname)
       @home = T.let(Pathname(context.fetch("home")), Pathname)
+      @temp = T.let(Pathname(context.fetch("temp")), Pathname)
       @config = T.let(Config.from_json(context.fetch("config"), ignore_invalid_keys: true), Config)
     end
 
