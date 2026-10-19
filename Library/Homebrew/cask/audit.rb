@@ -1214,6 +1214,7 @@ module Cask
     def audit_livecheck_required
       return unless new_cask?
       return unless cask.tap&.official?
+      return if cask.version&.latest?
 
       livecheck_required_problem = SharedAudits.livecheck_required_problem(cask)
       add_error livecheck_required_problem if livecheck_required_problem
