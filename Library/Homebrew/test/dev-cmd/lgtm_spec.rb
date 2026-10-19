@@ -28,7 +28,7 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
 
     context "when run inside homebrew/core" do
       let(:tap) do
-        instance_double(Tap, name: "homebrew/core", official?: true, git_repository: nil, default_remote: nil)
+        instance_double(Tap, name: "homebrew/core", core_tap?: true, git_repository: nil)
       end
       let(:changed_formula) { instance_double(Formula, latest_version_installed?: true) }
       let(:new_formula) { instance_double(Formula, latest_version_installed?: false) }
@@ -85,12 +85,22 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
 
         lgtm.run
       end
+
+      it "checks the git origin against `$HOMEBREW_CORE_GIT_REMOTE`" do
+        ENV["HOMEBREW_CORE_GIT_REMOTE"] = "https://mirror.example/homebrew-core.git"
+        allow(SystemCommand).to receive(:safe_system)
+        allow(lgtm).to receive(:opoo)
+        expect(diagnostic_checks).to receive(:examine_git_origin)
+          .with(nil, "https://mirror.example/homebrew-core.git")
+
+        lgtm.run
+      end
     end
 
     context "when run inside homebrew/core with --online" do
       let(:args) { ["--online"] }
       let(:tap) do
-        instance_double(Tap, name: "homebrew/core", official?: true, git_repository: nil, default_remote: nil)
+        instance_double(Tap, name: "homebrew/core", core_tap?: true, git_repository: nil)
       end
       let(:changed_formula) { instance_double(Formula, latest_version_installed?: true) }
       let(:new_formula) { instance_double(Formula, latest_version_installed?: false) }
@@ -138,7 +148,8 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
 
     context "when run inside homebrew/cask" do
       let(:tap) do
-        instance_double(Tap, name: "homebrew/cask", official?: true, git_repository: nil, default_remote: nil)
+        instance_double(Tap, name: "homebrew/cask", core_tap?: false, official?: true, git_repository: nil,
+default_remote: nil)
       end
 
       before do
@@ -179,7 +190,8 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
     context "when run inside homebrew/cask with --online" do
       let(:args) { ["--online"] }
       let(:tap) do
-        instance_double(Tap, name: "homebrew/cask", official?: true, git_repository: nil, default_remote: nil)
+        instance_double(Tap, name: "homebrew/cask", core_tap?: false, official?: true, git_repository: nil,
+default_remote: nil)
       end
 
       before do
@@ -216,7 +228,7 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
 
     context "when untracked formulae or casks exist" do
       let(:tap) do
-        instance_double(Tap, name: "homebrew/core", official?: true, git_repository: nil, default_remote: nil)
+        instance_double(Tap, name: "homebrew/core", core_tap?: true, git_repository: nil)
       end
 
       before do

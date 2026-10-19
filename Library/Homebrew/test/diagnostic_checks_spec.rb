@@ -41,6 +41,19 @@ RSpec.describe Homebrew::Diagnostic::Checks do
       expect(checks.examine_git_origin(repository, desired_origin)&.to_s)
         .to include("remote rename origin fork", "remote rename upstream origin")
     end
+
+    it "doesn't suggest renaming `origin` when only its rewritten URL is the desired origin" do
+      system git, "-C", repository.pathname, "config", "url.https://github.com/Homebrew/.insteadOf", "gh:"
+      system git, "-C", repository.pathname, "remote", "add", "origin", "gh:brew"
+
+      expect(checks.examine_git_origin(repository, desired_origin)&.to_s).not_to include("remote rename")
+    end
+
+    it "rejects an origin that only matches the desired origin as a pattern" do
+      system git, "-C", repository.pathname, "remote", "add", "origin", "https://githubXcom/Homebrew/brew"
+
+      expect(checks.examine_git_origin(repository, desired_origin)).not_to be_nil
+    end
   end
 
   specify "#check_access_directories" do

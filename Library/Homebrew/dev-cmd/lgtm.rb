@@ -31,6 +31,8 @@ module Homebrew
         checks = Diagnostic::Checks.new
         git_origin = if tap.nil?
           checks.check_brew_git_origin
+        elsif tap.core_tap?
+          checks.examine_git_origin(tap.git_repository, Homebrew::EnvConfig.core_git_remote)
         elsif tap.official?
           checks.examine_git_origin(tap.git_repository, tap.default_remote)
         end

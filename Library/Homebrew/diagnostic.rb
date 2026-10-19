@@ -174,11 +174,11 @@ module Homebrew
         supported_configuration_checks + build_from_source_checks
       end
 
-      # Treats GitHub SSH URLs, e.g. `git@github.com:Homebrew/brew.git`, like their HTTPS equivalents.
+      # Compares like {Tap.same_remote?}, e.g. treating SSH and HTTPS GitHub URLs as the same,
+      # but also allows a `.git` suffix or trailing slash on other hosts, e.g. mirrors.
       sig { params(url: String, desired_origin: String).returns(T::Boolean) }
       def desired_git_remote?(url, desired_origin)
-        url.sub(%r{\A(?:ssh://)?git@github\.com[:/]}, "https://github.com/")
-           .match?(%r{#{desired_origin}(\.git|/)?$}i)
+        Tap.same_remote?(url, desired_origin) || url.match?(%r{\A#{Regexp.escape(desired_origin)}(\.git|/)?\z}i)
       end
 
       sig { params(repository_path: GitRepository, desired_origin: String).returns(T.nilable(Finding)) }
@@ -190,8 +190,8 @@ module Homebrew
 
         remotes = Utils.popen_read(Utils::Git.git, "-C", repository_path.pathname, "remote", "-v").lines
         desired_remote, desired_remote_url = remotes.find do |line|
-          _, url, direction = line.split
-          direction == "(fetch)" && url && desired_git_remote?(url, desired_origin)
+          remote, url, direction = line.split
+          remote != "origin" && direction == "(fetch)" && url && desired_git_remote?(url, desired_origin)
         end&.split
 
         if current_origin.nil?
