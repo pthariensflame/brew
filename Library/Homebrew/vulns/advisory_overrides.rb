@@ -45,6 +45,7 @@ module Homebrew
         @registry_packages = T.let({}, T::Hash[String, RegistryPackageOverride])
         @advisories = T.let({}, T::Hash[String, T::Hash[String, Entry]])
         @preserved_homebrew_ranges = T.let({}, T::Hash[String, T::Array[String]])
+        @excluded_aliases = T.let({}, T::Hash[String, T::Hash[String, T::Array[String]]])
 
         root = hash(data, "top level")
         root.each do |formula_name, raw_formula|
@@ -81,8 +82,18 @@ module Homebrew
             raise Error, "#{formula_name} advisory identifiers must be strings" unless identifier.is_a?(String)
 
             entry = hash(raw_entry, "#{formula_name}.advisories.#{identifier}")
-            reject_unknown_keys(entry, %w[range_state upstream_fixed_in preserve_homebrew_ranges],
+            reject_unknown_keys(entry, %w[range_state upstream_fixed_in preserve_homebrew_ranges excluded_aliases],
                                 "#{formula_name}.advisories.#{identifier}")
+
+            excluded = entry.fetch("excluded_aliases", [])
+            if !excluded.is_a?(Array) || excluded.any? { |id| !id.is_a?(String) || !id.match?(/\S/) } ||
+               excluded.include?(identifier) || (entry.key?("excluded_aliases") && excluded.empty?)
+              raise Error, "#{formula_name}.advisories.#{identifier}.excluded_aliases must be a non-empty " \
+                           "array of other advisory identifiers"
+            end
+            if excluded.any?
+              (@excluded_aliases[formula_name] ||= {})[identifier] = excluded.uniq.freeze
+            end
 
             preserve_ranges = entry.fetch("preserve_homebrew_ranges", false)
             unless [true, false].include?(preserve_ranges)
@@ -106,7 +117,7 @@ module Homebrew
             if !fixed_in.nil? && !fixed_in.is_a?(String)
               raise Error, "#{formula_name}.advisories.#{identifier}.upstream_fixed_in must be a string or null"
             end
-            if state.nil? && !fixed_in_overridden && !preserve_ranges
+            if state.nil? && !fixed_in_overridden && !preserve_ranges && excluded.empty?
               raise Error, "#{formula_name}.advisories.#{identifier} must override at least one field"
             end
 
@@ -121,6 +132,8 @@ module Homebrew
         @advisories.freeze
         @preserved_homebrew_ranges.each_value(&:freeze)
         @preserved_homebrew_ranges.freeze
+        @excluded_aliases.each_value(&:freeze)
+        @excluded_aliases.freeze
       end
 
       sig { params(formula_name: String).returns(T::Boolean) }
@@ -131,6 +144,12 @@ module Homebrew
       sig { params(formula_name: String).returns(T.nilable(RegistryPackageOverride)) }
       def registry_package_override(formula_name)
         @registry_packages[formula_name]
+      end
+
+      # Key by the actual source record, before alias resolution or grouping.
+      sig { params(formula_name: String, identifier: String).returns(T::Array[String]) }
+      def excluded_aliases(formula_name, identifier)
+        @excluded_aliases.fetch(formula_name, {}).fetch(identifier, [])
       end
 
       sig { params(formula_name: String, identifiers: T::Array[String]).returns(T.nilable(Entry)) }
