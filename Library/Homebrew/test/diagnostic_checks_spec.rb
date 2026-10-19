@@ -21,6 +21,28 @@ RSpec.describe Homebrew::Diagnostic::Checks do
     EOS
   end
 
+  describe "#examine_git_origin" do
+    let(:git) { HOMEBREW_SHIMS_PATH/"shared/git" }
+    let(:repository) { GitRepository.new(mktmpdir) }
+    let(:desired_origin) { "https://github.com/Homebrew/brew" }
+
+    before { system git, "-C", repository.pathname, "init", "--quiet" }
+
+    it "accepts a GitHub SSH origin" do
+      system git, "-C", repository.pathname, "remote", "add", "origin", "git@github.com:Homebrew/brew.git"
+
+      expect(checks.examine_git_origin(repository, desired_origin)).to be_nil
+    end
+
+    it "suggests renaming the remotes when another remote is the desired origin" do
+      system git, "-C", repository.pathname, "remote", "add", "origin", "git@github.com:someone/brew.git"
+      system git, "-C", repository.pathname, "remote", "add", "upstream", "git@github.com:Homebrew/brew.git"
+
+      expect(checks.examine_git_origin(repository, desired_origin)&.to_s)
+        .to include("remote rename origin fork", "remote rename upstream origin")
+    end
+  end
+
   specify "#check_access_directories" do
     skip "User is root so everything is writable." if Process.euid.zero?
     begin

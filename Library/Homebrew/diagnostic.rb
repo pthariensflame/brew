@@ -174,11 +174,25 @@ module Homebrew
         supported_configuration_checks + build_from_source_checks
       end
 
+      # Treats GitHub SSH URLs, e.g. `git@github.com:Homebrew/brew.git`, like their HTTPS equivalents.
+      sig { params(url: String, desired_origin: String).returns(T::Boolean) }
+      def desired_git_remote?(url, desired_origin)
+        url.sub(%r{\A(?:ssh://)?git@github\.com[:/]}, "https://github.com/")
+           .match?(%r{#{desired_origin}(\.git|/)?$}i)
+      end
+
       sig { params(repository_path: GitRepository, desired_origin: String).returns(T.nilable(Finding)) }
       def examine_git_origin(repository_path, desired_origin)
         return if !Utils::Git.available? || !repository_path.git_repository?
 
         current_origin = repository_path.origin_url
+        return if current_origin && desired_git_remote?(current_origin, desired_origin)
+
+        remotes = Utils.popen_read(Utils::Git.git, "-C", repository_path.pathname, "remote", "-v").lines
+        desired_remote, desired_remote_url = remotes.find do |line|
+          _, url, direction = line.split
+          direction == "(fetch)" && url && desired_git_remote?(url, desired_origin)
+        end&.split
 
         if current_origin.nil?
           Finding.new(
@@ -197,7 +211,30 @@ module Homebrew
               ],
             ),
           )
-        elsif !current_origin.match?(%r{#{desired_origin}(\.git|/)?$}i)
+        elsif desired_remote
+          Finding.new(
+            <<~EOS,
+              The current git origin is:
+                #{current_origin}
+              but the `#{desired_remote}` remote is:
+                #{desired_remote_url}
+
+              With a non-standard origin, Homebrew won't update properly
+              and `--changed` options compare against the wrong branch.
+            EOS
+            remediation: Finding::Remediation.new(
+              text:     <<~EOS,
+                You can solve this by renaming the remotes:
+                  git -C "#{repository_path}" remote rename origin fork
+                  git -C "#{repository_path}" remote rename #{desired_remote} origin
+              EOS
+              commands: [
+                "git -C \"#{repository_path}\" remote rename origin fork",
+                "git -C \"#{repository_path}\" remote rename #{desired_remote} origin",
+              ],
+            ),
+          )
+        else
           Finding.new(
             <<~EOS,
               The current git origin is:

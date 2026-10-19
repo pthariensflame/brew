@@ -15,17 +15,21 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
     subject(:lgtm) { described_class.new(args) }
 
     let(:args) { [] }
+    let(:diagnostic_checks) { instance_double(Homebrew::Diagnostic::Checks, examine_git_origin: nil) }
 
     before do
       allow(Utils::GemSetup).to receive(:install_bundler_gems!)
       allow(lgtm).to receive(:ohai)
       allow(lgtm).to receive(:puts)
+      allow(Homebrew::Diagnostic::Checks).to receive(:new).and_return(diagnostic_checks)
       allow(Utils).to receive(:popen_read).with("git", "ls-files", "--others", "--exclude-standard", "--full-name")
                                           .and_return("")
     end
 
     context "when run inside homebrew/core" do
-      let(:tap) { instance_double(Tap, name: "homebrew/core") }
+      let(:tap) do
+        instance_double(Tap, name: "homebrew/core", official?: true, git_repository: nil, default_remote: nil)
+      end
       let(:changed_formula) { instance_double(Formula, latest_version_installed?: true) }
       let(:new_formula) { instance_double(Formula, latest_version_installed?: false) }
 
@@ -71,11 +75,23 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
 
         lgtm.run
       end
+
+      it "warns about a non-standard git origin" do
+        allow(diagnostic_checks).to receive(:examine_git_origin)
+          .and_return(Homebrew::Diagnostic::Finding.new("The current git origin is wrong."))
+        allow(SystemCommand).to receive(:safe_system)
+        allow(lgtm).to receive(:opoo)
+        expect(lgtm).to receive(:opoo).with("The current git origin is wrong.")
+
+        lgtm.run
+      end
     end
 
     context "when run inside homebrew/core with --online" do
       let(:args) { ["--online"] }
-      let(:tap) { instance_double(Tap, name: "homebrew/core") }
+      let(:tap) do
+        instance_double(Tap, name: "homebrew/core", official?: true, git_repository: nil, default_remote: nil)
+      end
       let(:changed_formula) { instance_double(Formula, latest_version_installed?: true) }
       let(:new_formula) { instance_double(Formula, latest_version_installed?: false) }
 
@@ -121,7 +137,9 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
     end
 
     context "when run inside homebrew/cask" do
-      let(:tap) { instance_double(Tap, name: "homebrew/cask") }
+      let(:tap) do
+        instance_double(Tap, name: "homebrew/cask", official?: true, git_repository: nil, default_remote: nil)
+      end
 
       before do
         allow(Tap).to receive(:from_path).and_return(tap)
@@ -160,7 +178,9 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
 
     context "when run inside homebrew/cask with --online" do
       let(:args) { ["--online"] }
-      let(:tap) { instance_double(Tap, name: "homebrew/cask") }
+      let(:tap) do
+        instance_double(Tap, name: "homebrew/cask", official?: true, git_repository: nil, default_remote: nil)
+      end
 
       before do
         allow(Tap).to receive(:from_path).and_return(tap)
@@ -195,7 +215,9 @@ RSpec.describe Homebrew::DevCmd::Lgtm do
     end
 
     context "when untracked formulae or casks exist" do
-      let(:tap) { instance_double(Tap, name: "homebrew/core") }
+      let(:tap) do
+        instance_double(Tap, name: "homebrew/core", official?: true, git_repository: nil, default_remote: nil)
+      end
 
       before do
         allow(Tap).to receive(:from_path).and_return(tap)
