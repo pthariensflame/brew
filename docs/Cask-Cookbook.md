@@ -800,6 +800,8 @@ The `livecheck` stanza is used to automatically fetch the latest version of a ca
 
 Every `livecheck` block must contain a `url`, which can be either a string or a symbol pointing to other URLs in the cask (`:url` or `:homepage`).
 
+Omit a `livecheck` block if a strategy automatically provides correct version information and no changes are needed.
+
 Refer to the [`brew livecheck`](Brew-Livecheck.md) documentation for how to write a `livecheck` block.
 
 ### Stanza: `no_autobump!`
@@ -1421,8 +1423,8 @@ cask "calibre" do
     sha256 "a7ed19ae0526630ccb138b9afee6dc5169904180b02f7a3089e78d3e0022753b"
 
     livecheck do
-      url "https://github.com/kovidgoyal/calibre"
-      strategy :github_latest
+      url "https://calibre-ebook.com/dist/osx"
+      strategy :header_match
     end
   end
 end
