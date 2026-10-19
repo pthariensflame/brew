@@ -4,6 +4,20 @@
 require "vulns/advisory_overrides"
 
 RSpec.describe Homebrew::Vulns::AdvisoryOverrides do
+  it "rejects empty, non-string and self alias exclusions" do
+    invalid = [[], nil, "CVE-2", [nil], [""], ["CVE-1"]]
+
+    expect(invalid).to all(satisfy do |excluded|
+      data = { "example" => { "advisories" => { "CVE-1" => { "excluded_aliases" => excluded } } } }
+      begin
+        described_class.new(data)
+        false
+      rescue Homebrew::Vulns::AdvisoryOverrides::Error
+        true
+      end
+    end)
+  end
+
   it "protects a Homebrew range independently of upstream range corrections" do
     overrides = described_class.new({
       "requests" => { "advisories" => {

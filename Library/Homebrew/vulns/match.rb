@@ -362,7 +362,7 @@ module Homebrew
             next yield f, [] unless identity&.identifiable?
 
             begin
-              hits = hits_from(by_formula[f] || {}, identity)
+              hits = hits_from(by_formula[f] || {}, identity, formula_name: f.name)
             rescue OSV::Error => e
               raise unless on_error
 
@@ -375,17 +375,18 @@ module Homebrew
       end
 
       sig {
-        params(id_evidence: T::Hash[String, T::Array[Evidence]], identity: Identity).returns(T::Array[Hit])
+        params(id_evidence: T::Hash[String, T::Array[Evidence]], identity: Identity, formula_name: T.nilable(String))
+          .returns(T::Array[Hit])
       }
-      def hits_from(id_evidence, identity)
-        hits = resolve_upstream(id_evidence, identity)
+      def hits_from(id_evidence, identity, formula_name: nil)
+        hits = resolve_upstream(id_evidence, identity, formula_name:)
         cpan_evidence(identity).each do |ev|
           cpan_sec.advisories_for(ev.name).each do |adv|
             annotated = Evidence.new(**ev.to_h, advisory: adv).freeze
             if adv.cves.any?
               adv.cves.each do |cve|
                 record = begin
-                  fetch_vulnerability(cve)
+                  corrected_vulnerability(cve, formula_name:)
                 rescue OSV::NotFoundError
                   nil
                 end
@@ -457,8 +458,8 @@ module Homebrew
       # Rediscover stored resource subjects using fresh versionless queries.
       # Stored versions only reproduce the candidate's range basis. The history
       # walk must establish every version and witness each resource's identity.
-      sig { params(records: T::Array[ResourceRecord]).returns(T::Array[Hit]) }
-      def resource_advisories_for(records)
+      sig { params(records: T::Array[ResourceRecord], formula_name: T.nilable(String)).returns(T::Array[Hit]) }
+      def resource_advisories_for(records, formula_name: nil)
         evidence = records.flat_map(&:evidence).uniq
         return [] if evidence.empty?
 
@@ -476,7 +477,7 @@ module Homebrew
         end
         prefetch_vulnerabilities(id_evidence.keys)
         identity = Identity.new(resource_packages: [], distro_packages: {})
-        hits = dedup_by_aliases(resolve_upstream(id_evidence, identity))
+        hits = dedup_by_aliases(resolve_upstream(id_evidence, identity, formula_name:))
         hits.select { |hit| records.any? { |record| record.upstream.intersect?(hit.identifiers) } }
       end
 
@@ -524,18 +525,18 @@ module Homebrew
       # pointing at our own identity so {#range_status} can check the CVE
       # record's `affected[]` against our version.
       sig {
-        params(id_evidence: T::Hash[String, T::Array[Evidence]], identity: Identity)
+        params(id_evidence: T::Hash[String, T::Array[Evidence]], identity: Identity, formula_name: T.nilable(String))
           .returns(T::Array[Hit])
       }
-      def resolve_upstream(id_evidence, identity)
+      def resolve_upstream(id_evidence, identity, formula_name: nil)
         own = own_evidence(identity)
         hits = T.let([], T::Array[Hit])
 
         id_evidence.each do |id, evidence|
-          record = fetch_vulnerability(id)
+          record = corrected_vulnerability(id, formula_name:)
           next if record.nil?
 
-          resolved = resolve_to_cves(record, Set[id], MAX_UPSTREAM_HOPS)
+          resolved = resolve_to_cves(record, Set[id], MAX_UPSTREAM_HOPS, formula_name:)
           if resolved.empty?
             hits << Hit.new(vulnerability: record, evidence:)
             next
@@ -560,10 +561,10 @@ module Homebrew
       # is one already; `[]` if the walk exhausts without reaching a CVE (the
       # caller then keeps `record` itself as a low-confidence hit).
       sig {
-        params(record: Vulnerability, seen: T::Set[String], budget: Integer)
+        params(record: Vulnerability, seen: T::Set[String], budget: Integer, formula_name: T.nilable(String))
           .returns(T::Array[Vulnerability])
       }
-      def resolve_to_cves(record, seen, budget)
+      def resolve_to_cves(record, seen, budget, formula_name: nil)
         return [record] if record.cve_ids.any?
         return [] if budget.zero?
 
@@ -572,8 +573,8 @@ module Homebrew
         Array(follow).uniq.flat_map do |ref|
           next [] unless seen.add?(ref)
 
-          upstream = fetch_vulnerability(ref)
-          upstream ? resolve_to_cves(upstream, seen, budget - 1) : []
+          upstream = corrected_vulnerability(ref, formula_name:)
+          upstream ? resolve_to_cves(upstream, seen, budget - 1, formula_name:) : []
         rescue OSV::NotFoundError
           # A dangling upstream link supplies no record. Keep the cached error
           # so fetching this ID directly from query results still fails closed.
@@ -639,6 +640,15 @@ module Homebrew
             end
           end
         end
+      end
+
+      sig { params(id: String, formula_name: T.nilable(String)).returns(T.nilable(Vulnerability)) }
+      def corrected_vulnerability(id, formula_name:)
+        record = fetch_vulnerability(id)
+        excluded = @overrides&.excluded_aliases(formula_name, id) if formula_name
+        return record if record.nil? || excluded.blank?
+
+        record.excluding_aliases(excluded)
       end
 
       sig { params(id: String).returns(T.nilable(Vulnerability)) }

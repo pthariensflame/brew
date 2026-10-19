@@ -1155,6 +1155,20 @@ RSpec.describe Homebrew::DevCmd::AdvisoryMatch do
       expect([File.read(path), Homebrew.failed?]).to eq [original, true]
     end
 
+    it "does not certify a reviewed introduction from a matching fixed boundary alone" do
+      existing[:affected].first[:ranges].first[:events].first[:introduced] = "2.27.0"
+      File.write(path, JSON.generate(existing))
+      original = File.read(path)
+      matcher = Homebrew::Vulns::Match.new
+      allow(matcher).to receive(:first_fixed_version).and_return("2.28.1")
+      allow(Homebrew::Vulns::Match).to receive(:new).and_return(matcher)
+
+      output = capture_stdout { cmd_for("requests", "--output", dir, "--new-history").run }
+
+      expect([File.read(path), Homebrew.failed?, output.include?("1 range-basis skips")])
+        .to eq [original, true, true]
+    end
+
     it "does not adopt provenance when the forced history walk is unavailable" do
       File.write(path, JSON.generate(existing))
       original = File.read(path)

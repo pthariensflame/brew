@@ -383,6 +383,32 @@ RSpec.describe Homebrew::Vulns::Match do
       } })
     end
 
+    it "separates reviewed false aliases without contaminating cached records for other formulae" do
+      original = %w[CVE-2026-40072 GHSA-5hr4-253g-cpx2 PYSEC-2026-3414]
+      bypass = "CVE-2026-111171"
+      identifiers = [*original, bypass]
+      advisories = identifiers.to_h do |id|
+        excluded = (id == bypass) ? original : [bypass]
+        [id, { "excluded_aliases" => excluded }]
+      end
+      overrides = Homebrew::Vulns::AdvisoryOverrides.new({ "slither-analyzer" => { "advisories" => advisories } })
+      corrected = described_class.new(repology:, cpan_sec:, overrides:)
+      identifiers.each do |id|
+        allow(Homebrew::Vulns::OSV).to receive(:vulnerability).with(id).and_return(
+          { "id" => id, "aliases" => identifiers - [id] },
+        )
+      end
+      identity = Homebrew::Vulns::Match::Identity.new(resource_packages: [], distro_packages: {})
+      evidence = identifiers.to_h { |id| [id, [ev(:registry, ecosystem: "PyPI", name: "web3")]] }
+      split = corrected.hits_from(evidence, identity, formula_name: "slither-analyzer")
+      unaffected = corrected.hits_from(evidence, identity, formula_name: "other")
+
+      expect([split.map { |hit| hit.identifiers.sort }.sort,
+              split.flat_map(&:evidence).map { |row| row.source_record.identifiers.sort }.uniq.sort,
+              unaffected.fetch(0).identifiers.sort])
+        .to eq [[original.sort, [bypass]].sort, [original.sort, [bypass]].sort, identifiers.sort]
+    end
+
     context "with strict CPANSA fetching" do
       let(:cpan_sec) do
         Homebrew::Vulns::CPANSec.new({ "meta" => {}, "dists" => {

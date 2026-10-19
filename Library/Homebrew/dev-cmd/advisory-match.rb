@@ -401,7 +401,7 @@ module Homebrew
             false
           end
         end
-        resource_hits = matcher.resource_advisories_for(resource_records)
+        resource_hits = matcher.resource_advisories_for(resource_records, formula_name: formula.name)
         hits = matcher.dedup_by_aliases(hits + resource_hits)
         resource_records.each do |record|
           next if hits.any? { |hit| record.upstream.intersect?(hit.identifiers) }
