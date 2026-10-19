@@ -1762,6 +1762,22 @@ RSpec.describe Cask::Audit, :cask do
           run
         end
       end
+
+      context "when the cask uses `version :latest`" do
+        let(:cask) do
+          Cask::Cask.new("livecheck-required", tap: CoreCaskTap.instance) do
+            version :latest
+            sha256 :no_check
+            url "https://brew.sh/livecheck-required.dmg"
+            homepage "https://brew.sh"
+          end
+        end
+
+        it "does not check for a working livecheck" do
+          expect(SharedAudits).not_to receive(:livecheck_required_problem)
+          run
+        end
+      end
     end
 
     describe "GitHub repository notability" do
