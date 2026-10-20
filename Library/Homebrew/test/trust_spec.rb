@@ -812,6 +812,32 @@ RSpec.describe Homebrew::Trust, :trust_store do
     FileUtils.rm_rf HOMEBREW_TAP_DIRECTORY/"thirdparty"
   end
 
+  context "when an untrusted formula path contains a newline" do
+    sig { returns(Pathname) }
+    let(:formula_path) { Tap.fetch("thirdparty", "foo").formula_dir/"d\ne/default-trust.rb" }
+
+    before do
+      formula_path.dirname.mkpath
+      formula_path.write <<~RUBY
+        class DefaultTrust < Formula
+          url "https://brew.sh/default-trust-1.0.tar.gz"
+        end
+      RUBY
+    end
+
+    after do
+      FileUtils.rm_rf HOMEBREW_TAP_DIRECTORY/"thirdparty"
+    end
+
+    it "does not trust the formula file" do
+      expect(described_class.trusted_formula_file?(formula_path)).to be(false)
+    end
+
+    it "refuses to evaluate the formula" do
+      expect { Formulary.factory(formula_path) }.to raise_error(Homebrew::UntrustedTapError)
+    end
+  end
+
   it "allows explicitly named formula files when trust checks are enabled" do
     old_argv = ARGV.dup
     tap = Tap.fetch("thirdparty", "foo")

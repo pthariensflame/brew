@@ -150,6 +150,25 @@ RSpec.describe Tap do
       expect(described_class.from_path(path)).to eq tap
     end
 
+    test_each ["Formula/f\no/formula.rb", "Formula/f\r\no/formula.rb", "Casks/ca\nsk.rb",
+               "cmd/brew-fo\no.rb"] do |file|
+      it "returns the Tap for a path containing newlines: #{file.inspect}" do
+        expect(described_class.from_path(path/file)).to eq tap
+      end
+    end
+
+    context "when a newline precedes another tap's path" do
+      let(:tap) { described_class.fetch("thirdparty", "foo") }
+
+      after do
+        tap.uninstall
+      end
+
+      it "returns the original Tap" do
+        expect(described_class.from_path(path/"Formula/a\n#{CoreTap.instance.path}/Formula/foo.rb")).to eq tap
+      end
+    end
+
     context "when path contains a dot" do
       let(:tap) { described_class.fetch("str4d.xyz", "rage") }
 
