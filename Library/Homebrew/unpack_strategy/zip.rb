@@ -34,11 +34,13 @@ module UnpackStrategy
 
       with_env(TZ: "UTC") do
         quiet_flags = verbose ? [] : ["-qq"]
-        result = system_command! "unzip",
-                                 args:         [*quiet_flags, "-o", path, "-d", unpack_dir],
-                                 env:          { "PATH" => PATH.new(unzip&.opt_bin, ENV.fetch("PATH")).to_s },
-                                 verbose:,
-                                 print_stderr: false
+        result = path.with_literal_name(temporary_directory:) do |archive|
+          system_command! "unzip",
+                          args:         [*quiet_flags, "-o", archive, "-d", unpack_dir],
+                          env:          { "PATH" => PATH.new(unzip&.opt_bin, ENV.fetch("PATH")).to_s },
+                          verbose:,
+                          print_stderr: false
+        end
 
         FileUtils.rm_rf unpack_dir/"__MACOSX"
 
