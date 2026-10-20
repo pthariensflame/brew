@@ -52,9 +52,10 @@ module UnpackStrategy
                         args:    ["--extract", "--no-same-owner",
                                   "--file", tar_path,
                                   "--directory", unpack_dir],
-                        # Keep tar diagnostics in English so that out of space error handle in
-                        # `‎unpack_strategy.rb` can recognize out-of-space errors.
-                        env:     { "LC_ALL" => "C" },
+                        # Keep tar diagnostics in English so that `unpack_strategy.rb` can
+                        # recognize out-of-space errors, while using a UTF-8 character set so
+                        # that archives containing non-ASCII paths can be extracted.
+                        env:     { "LC_ALL" => "en_US.UTF-8" },
                         verbose:
       end
     end

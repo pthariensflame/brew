@@ -62,8 +62,8 @@ RSpec.describe UnpackStrategy::Tar do
       }
     end
 
-    it "uses a stable locale for tar diagnostics" do
-      expect(strategy).to receive(:system_command!).with("tar", hash_including(env: { "LC_ALL" => "C" }))
+    it "uses a UTF-8 locale for tar so non-ASCII paths can be extracted" do
+      expect(strategy).to receive(:system_command!).with("tar", hash_including(env: { "LC_ALL" => "en_US.UTF-8" }))
 
       strategy.extract(to: unpack_dir)
     end
