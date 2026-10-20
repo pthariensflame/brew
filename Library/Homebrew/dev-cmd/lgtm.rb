@@ -3,6 +3,7 @@
 
 require "utils/brew_command"
 
+require "diagnostic"
 require "formula"
 require "tap"
 
@@ -26,6 +27,16 @@ module Homebrew
         Utils::GemSetup.install_bundler_gems!(groups: Utils::GemSetup.valid_gem_groups - ["sorbet"])
 
         tap = Tap.from_path(Dir.pwd)
+
+        checks = Diagnostic::Checks.new
+        git_origin = if tap.nil?
+          checks.check_brew_git_origin
+        elsif tap.core_tap?
+          checks.examine_git_origin(tap.git_repository, Homebrew::EnvConfig.core_git_remote)
+        elsif tap.official?
+          checks.examine_git_origin(tap.git_repository, tap.default_remote)
+        end
+        opoo git_origin.to_s if git_origin
 
         typecheck_args = ["typecheck", tap&.name].compact
         ohai "brew #{typecheck_args.join(" ")}"
