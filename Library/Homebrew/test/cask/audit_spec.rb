@@ -1853,6 +1853,46 @@ RSpec.describe Cask::Audit, :cask do
       it "recognizes a suppressed requires_rosetta caveat" do
         expect(run).to pass
       end
+
+      context "when the cask is new" do
+        let(:new_cask) { true }
+
+        it "rejects artifacts that require Rosetta 2" do
+          expect(run).to error_with("New casks must not require Rosetta 2!")
+        end
+      end
+
+      context "when the cask does not depend on a macOS version" do
+        let(:cask) do
+          Cask::Cask.new("rosetta-audit") do
+            version "1.0"
+            sha256 :no_check
+            url "https://brew.sh/rosetta-audit.zip"
+            name "Rosetta Audit"
+            homepage "https://brew.sh/"
+
+            binary "rosetta-audit"
+          end
+        end
+
+        it "detects artifacts that require Rosetta 2" do
+          expect(run).to error_with(/requires Rosetta 2 but this is not indicated by the caveats/)
+        end
+      end
+
+      context "when auditing for Linux" do
+        let(:new_cask) { true }
+
+        around do |example|
+          Homebrew::SimulateSystem.with(os: :linux, arch: :arm) do
+            example.run
+          end
+        end
+
+        it "skips the audit" do
+          expect(run).to pass
+        end
+      end
     end
 
     describe "artifact case checks" do
