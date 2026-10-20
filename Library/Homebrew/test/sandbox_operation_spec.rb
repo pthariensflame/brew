@@ -32,6 +32,21 @@ RSpec.describe Sandbox do
     HOMEBREW_TEMP.chmod(0755)
   end
 
+  it "extracts only the selected ZIP in a worker using its private temporary directory", :needs_unzip do
+    temporary_directory = mktmpdir
+    directory = mktmpdir
+    source = mktmpdir
+    FileUtils.cp TEST_FIXTURE_DIR/"cask/caffeine.zip", source/"x.incomplete"
+    FileUtils.cp TEST_FIXTURE_DIR/"cask/MyFancyApp.zip", source/"x[!?]incomplete"
+    HOMEBREW_TEMP.chmod(0555)
+
+    UnpackStrategy::Zip.new(source/"x[!?]incomplete", merge_xattrs: true, temporary_directory:).extract(to: directory)
+
+    expect([directory.children(false).map(&:to_s), temporary_directory.children]).to eq([["MyFancyApp"], []])
+  ensure
+    HOMEBREW_TEMP.chmod(0755)
+  end
+
   it "mounts nested disk images in the parent and copies their contents in a worker", :needs_macos do
     mount = UnpackStrategy::Dmg::Mount.new(mktmpdir)
     (mount.path/"container").mkpath

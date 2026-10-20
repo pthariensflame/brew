@@ -26,7 +26,7 @@ module UnpackStrategy
     sig { override.params(unpack_dir: Pathname, basename: Pathname, verbose: T::Boolean).void }
     def extract_to_dir(unpack_dir, basename:, verbose:)
       system_command! "7zr",
-                      args:    ["x", "-y", "-bd", "-bso0", path, "-o#{unpack_dir}"],
+                      args:    ["x", "-y", "-bd", "-bso0", "-spd", path, "-o#{unpack_dir}"],
                       env:     Utils::Path.formula_opt_bin_env("p7zip"),
                       verbose:
     end

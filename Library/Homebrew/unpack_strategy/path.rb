@@ -34,10 +34,28 @@ module UnpackStrategy
 
     sig { returns(T::Array[String]) }
     def zipinfo
-      @zipinfo ||= system_command("zipinfo", args: ["-1", self], print_stderr: false)
-                   .stdout
-                   .encode(Encoding::UTF_8, invalid: :replace)
-                   .split("\n")
+      @zipinfo ||= with_literal_name do |archive|
+        system_command("zipinfo", args: ["-1", archive], print_stderr: false)
+          .stdout
+          .encode(Encoding::UTF_8, invalid: :replace)
+          .split("\n")
+      end
+    end
+
+    # Yield an isolated, fixed-name link for tools that interpret archive filenames.
+    sig {
+      type_parameters(:U)
+        .params(temporary_directory: Pathname, _block: T.proc.params(archive: Pathname).returns(T.type_parameter(:U)))
+        .returns(T.type_parameter(:U))
+    }
+    def with_literal_name(temporary_directory: HOMEBREW_TEMP, &_block)
+      Dir.mktmpdir("homebrew-unpack", temporary_directory.to_s) do |tmpdir|
+        archive = Pathname(tmpdir)/"archive"
+        FileUtils.ln_s expand_path, archive
+        yield archive
+      end
+    rescue ErrorDuringExecution => e
+      raise e.exception("Could not process archive #{self}:\n#{e.message}"), cause: nil
     end
   end
 end
