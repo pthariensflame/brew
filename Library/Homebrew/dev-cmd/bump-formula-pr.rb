@@ -560,10 +560,11 @@ module Homebrew
       }
       def patches_for_removal(node, &block)
         platform_blocks = Utils::AST::FormulaAST::PATCH_PLATFORM_BLOCKS
+        # Retain stable-only patches to avoid leaving a redundant `stable` block.
         return [] unless node.each_ancestor.all? do |parent|
           parent.class_type? || parent.begin_type? ||
           (parent.is_a?(Utils::AST::BlockNode) && parent.send_node.receiver.nil? &&
-           [:patch, :stable, *platform_blocks].include?(parent.method_name))
+           [:patch, *platform_blocks].include?(parent.method_name))
         end
         return [] unless node.arguments.empty?
 

@@ -316,8 +316,8 @@ RSpec.describe Homebrew::DevCmd::BumpFormulaPr do
       end
     end
 
-    it "retains patches in HEAD, resources and Ruby conditionals" do
-      expect(["head do", 'resource "foo" do', "if OS.linux?"].map do |opening|
+    it "retains patches in stable, HEAD, resources and Ruby conditionals" do
+      expect(["stable do", "head do", 'resource "foo" do', "if OS.linux?"].map do |opening|
         source = "class Foo < Formula\n#{opening}\n#{patch}\nend\nend\n"
         node = Utils::AST.process_source(source).last.each_node(:block).find { |block| block.method_name == :patch }
         bump_formula_pr.patches_for_removal(node) { true }
