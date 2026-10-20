@@ -36,7 +36,7 @@ The [Cask Cookbook](Cask-Cookbook.md#casks-pinned-to-specific-versions) document
 
 Apple's [Rosetta 2 transition documentation](https://developer.apple.com/documentation/apple-silicon/about-the-rosetta-translation-environment/) says general application support will remain available through macOS 27, with only a narrower legacy-games-focused subset beyond that.
 Casks that require [`requires_rosetta`](Cask-Cookbook.md#caveats-mini-dsl) remain eligible while the latest major macOS release provides that general support.
-Under Apple's announced timeline, new `requires_rosetta` casks will become ineligible when macOS 27 is the latest stable macOS version.
+Under Apple's announced timeline, new `requires_rosetta` casks became ineligible when macOS 27 became the latest stable macOS version and `brew audit --new` rejects them.
 Existing `requires_rosetta` casks are expected to be deprecated while macOS 27 is current, then disabled or removed after macOS 28 becomes the latest stable macOS version.
 
 ### Regional and localised editions

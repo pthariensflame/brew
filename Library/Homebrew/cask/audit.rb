@@ -806,10 +806,8 @@ module Cask
     def audit_rosetta
       return if (url = cask.url).nil?
       return unless online?
-      # Rosetta 2 is only for ARM-capable macOS versions, which are Big Sur (11.x) and later
+      return unless Homebrew::SimulateSystem.simulating_or_running_on_macos?
       return if Homebrew::SimulateSystem.current_arch != :arm
-      return if MacOSVersion::SYMBOLS.fetch(Homebrew::SimulateSystem.current_os, "10") < "11"
-      return if cask.depends_on.macos&.maximum_version.to_s < "11"
 
       odebug "Auditing Rosetta 2 requirement"
 
@@ -866,7 +864,9 @@ module Cask
         end
 
         if any_requires_rosetta
-          if !mentions_rosetta && !requires_intel
+          if new_cask?
+            add_error "New casks must not require Rosetta 2!", location: url.location
+          elsif !mentions_rosetta && !requires_intel
             add_error "At least one artifact requires Rosetta 2 but this is not indicated by the caveats!",
                       location: url.location
           end
