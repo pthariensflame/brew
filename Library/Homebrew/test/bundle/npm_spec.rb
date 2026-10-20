@@ -249,7 +249,7 @@ RSpec.describe Homebrew::Bundle::Npm do
         described_class.cleanup!(["example"])
       end.to(
         change(Homebrew, :failed?).from(false).to(true)
-          .and(output(/Uninstalled 0 npm packages/).to_stdout)
+          .and(output(/^Uninstalled 0 npm packages$/).to_stdout)
           .and(output(/Failed to uninstall npm packages: example/).to_stderr),
       )
     end
@@ -257,7 +257,16 @@ RSpec.describe Homebrew::Bundle::Npm do
     it "reports successful cleanup" do
       allow(Homebrew::Bundle).to receive(:system).and_return(true)
 
-      expect { described_class.cleanup!(["example"]) }.to output(/Uninstalled 1 npm package/).to_stdout
+      expect do
+        described_class.cleanup!(["example"])
+      end.to output("Uninstalled 1 npm package\n").to_stdout.and output("").to_stderr
+    end
+
+    it "does not mark successful cleanup as failed" do
+      allow(Homebrew::Bundle).to receive(:system).and_return(true)
+      allow(described_class).to receive(:puts)
+
+      expect { described_class.cleanup!(["example"]) }.not_to change(Homebrew, :failed?)
     end
 
     it "counts successful commands and continues after failure" do
@@ -270,7 +279,7 @@ RSpec.describe Homebrew::Bundle::Npm do
         described_class.cleanup!(%w[first second third])
       end.to(
         change(Homebrew, :failed?).from(false).to(true)
-          .and(output(/Uninstalled 2 npm packages/).to_stdout)
+          .and(output("Uninstalled 2 npm packages\n").to_stdout)
           .and(output(/Failed to uninstall npm packages: second/).to_stderr),
       )
     end

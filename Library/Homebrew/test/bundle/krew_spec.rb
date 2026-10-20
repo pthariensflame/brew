@@ -164,7 +164,7 @@ RSpec.describe Homebrew::Bundle::Krew do
         true
       end
 
-      expect { described_class.cleanup!(["ns"]) }.to output(/Uninstalled 1 krew plugin/).to_stdout
+      expect { described_class.cleanup!(["ns"]) }.to output("Uninstalled 1 krew plugin\n").to_stdout
     end
   end
 end

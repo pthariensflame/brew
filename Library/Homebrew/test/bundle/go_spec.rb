@@ -198,7 +198,15 @@ RSpec.describe Homebrew::Bundle::Go do
       it "counts removed executables rather than packages" do
         expect do
           described_class.cleanup!(["example.com/tools/example"])
-        end.to output(/Removed 2 Go executables/).to_stdout
+        end.to output("Removed 2 Go executables\n").to_stdout.and output("").to_stderr
+      end
+
+      it "does not mark successful cleanup as failed" do
+        allow(described_class).to receive(:puts)
+
+        expect do
+          described_class.cleanup!(["example.com/tools/example"])
+        end.not_to change(Homebrew, :failed?)
       end
 
       it "reports deletion errors and continues with the next executable" do
@@ -209,7 +217,7 @@ RSpec.describe Homebrew::Bundle::Go do
           described_class.cleanup!(["example.com/tools/example"])
         end.to(
           change(Homebrew, :failed?).from(false).to(true)
-            .and(output(/Removed 1 Go executable/).to_stdout)
+            .and(output("Removed 1 Go executable\n").to_stdout)
             .and(output(
               a_string_including("Failed to remove Go executable /tmp/go/bin/first"),
             ).to_stderr),
@@ -221,8 +229,8 @@ RSpec.describe Homebrew::Bundle::Go do
 
         expect do
           described_class.cleanup!(["example.com/tools/example"])
-        end.to output(/Removed 1 Go executable/).to_stdout
-                                                .and output("").to_stderr
+        end.to output("Removed 1 Go executable\n").to_stdout
+                                                  .and output("").to_stderr
       end
     end
 

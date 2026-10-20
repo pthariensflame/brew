@@ -29,7 +29,7 @@ RSpec.describe Homebrew::Bundle::Flatpak do
             .and(output(
               a_string_including("Failed to uninstall Flatpak packages: org.example.App"),
             ).to_stderr)
-            .and(output(/Uninstalled 1 flatpak/).to_stdout),
+            .and(output("Uninstalled 1 flatpak\n").to_stdout),
         )
       end
     end

@@ -368,7 +368,7 @@ RSpec.describe Homebrew::Bundle::Winget do
               "--accept-source-agreements", "--disable-interactivity", verbose: false)
         .and_return(true)
 
-      expect { described_class.cleanup!(items) }.to output(/Uninstalled 1 winget package/).to_stdout
+      expect { described_class.cleanup!(items) }.to output("Uninstalled 1 winget package\n").to_stdout
     end
 
     it "reports failed removals by app name and source without changing PATH" do
@@ -390,7 +390,7 @@ RSpec.describe Homebrew::Bundle::Winget do
       end.to(
         change(Homebrew, :failed?).from(false).to(true)
           .and(output(a_string_including("Discord (XPDC2RH70K22MN, msstore)")).to_stderr)
-          .and(output(/Uninstalled 0 winget packages/).to_stdout),
+          .and(output("Uninstalled 0 winget packages\n").to_stdout),
       )
     end
   end

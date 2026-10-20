@@ -27,7 +27,7 @@ RSpec.describe Homebrew::Bundle::VscodeExtension do
         end.to(
           change(Homebrew, :failed?).from(false).to(true)
             .and(output(a_string_including("publisher.first")).to_stderr)
-            .and(output(/Uninstalled 1 vscode extension/).to_stdout),
+            .and(output("Uninstalled 1 vscode extension\n").to_stdout),
         )
       end
     end
