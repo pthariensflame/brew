@@ -237,7 +237,6 @@ module Homebrew
         :registered_extensions_to_install
       end
 
-      # Continue after unsuccessful commands while preserving the overall failure status.
       sig { params(items: T::Array[String]).void }
       def self.cleanup!(items)
         executable = package_manager_executable
