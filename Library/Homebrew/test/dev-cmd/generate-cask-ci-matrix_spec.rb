@@ -158,6 +158,44 @@ RSpec.describe Homebrew::DevCmd::GenerateCaskCiMatrix do
       app "Test.app"
     end
   end
+  let(:c_macos_version_variations) do
+    Cask::Cask.new("test-macos-version-variations") do
+      on_sequoia :or_older do
+        version "0.0.1"
+      end
+      on_tahoe :or_newer do
+        version "0.0.2"
+      end
+
+      url "https://brew.sh/test.dmg"
+      name "Test"
+      desc "Test cask"
+      homepage "https://brew.sh"
+
+      depends_on :macos
+
+      app "Test.app"
+    end
+  end
+  let(:c_sequoia_only_url) do
+    Cask::Cask.new("test-sequoia-only-url") do
+      on_sequoia :or_older do
+        version "0.0.1"
+      end
+      on_tahoe :or_newer do
+        version "0.0.2"
+      end
+
+      url "https://brew.sh/test-#{version}.dmg"
+      name "Test"
+      desc "Test cask"
+      homepage "https://brew.sh"
+
+      depends_on :macos
+
+      app "Test.app"
+    end
+  end
   let(:c_maximum_macos_below_all_runners) do
     Cask::Cask.new("test-maximum-macos-below-all-runners") do
       version "0.0.1,2"
@@ -324,6 +362,79 @@ RSpec.describe Homebrew::DevCmd::GenerateCaskCiMatrix do
           brew "generate-cask-ci-matrix", "--cask", "local-caffeine", brew_env
         end.to be_a_success
       end.to output(/"token": "local-caffeine"/).to_stdout
+    end
+  end
+
+  describe "cask job audit arguments" do
+    subject(:audit_args_by_runner) do
+      command.run
+      JSON.parse(stdout.string)
+          .select { |job| job.key?("cask") }
+          .to_h { |job| [job.fetch("runner"), job.fetch("audit_args")] }
+    end
+
+    let(:command) { described_class.new(["--url", "https://github.com/Homebrew/homebrew-cask/pull/1"]) }
+    let(:stdout) { StringIO.new }
+    let(:labels) { [] }
+    let(:cask) { c_macos_version_variations }
+    let(:cask_path) { Pathname("Casks/t/test.rb") }
+
+    before do
+      ENV["GITHUB_REPOSITORY"] = "Homebrew/homebrew-cask"
+      ENV.delete("GITHUB_OUTPUT")
+      allow(GitHub::API).to receive(:open_rest).and_return("labels" => labels.map { |name| { "name" => name } })
+      allow(command).to receive(:find_changed_files).and_return(
+        modified_files:                [cask_path],
+        added_files:                   [],
+        modified_ruby_files:           [cask_path],
+        modified_command_files:        [],
+        modified_github_actions_files: [],
+        modified_cask_files:           [cask_path],
+      )
+      allow(Cask::CaskLoader).to receive(:load).and_return(cask)
+      allow(command).to receive(:puts) { |output| stdout.puts(output) }
+    end
+
+    context "when a cask varies across macOS versions" do
+      it "skips the signing audit only on macOS 15" do
+        expect(audit_args_by_runner).to eq(
+          "macos-15" => ["--online", "--except", "signing"],
+          "macos-26" => ["--online"],
+          "xcode-27" => ["--online"],
+        )
+      end
+
+      context "with a label skipping an audit" do
+        let(:labels) { ["ci-skip-homepage"] }
+
+        it "merges the label's exceptions on every runner" do
+          expect(audit_args_by_runner).to eq(
+            "macos-15" => ["--online", "--except", "homepage_https_availability,signing"],
+            "macos-26" => ["--online", "--except", "homepage_https_availability"],
+            "xcode-27" => ["--online", "--except", "homepage_https_availability"],
+          )
+        end
+      end
+    end
+
+    context "when only macOS 15 downloads a cask's URL" do
+      let(:cask) { c_sequoia_only_url }
+
+      it "keeps the signing audit" do
+        expect(audit_args_by_runner).to eq(
+          "macos-15" => ["--online"],
+          "macos-26" => ["--online"],
+          "xcode-27" => ["--online"],
+        )
+      end
+    end
+
+    context "when macOS 15 is the only macOS runner for a cask" do
+      let(:cask) { c_maximum_macos }
+
+      it "keeps the signing audit" do
+        expect(audit_args_by_runner).to eq("macos-15" => ["--online"])
+      end
     end
   end
 

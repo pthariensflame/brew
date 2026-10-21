@@ -214,7 +214,8 @@ module Homebrew
       sig {
         params(tap: T.nilable(Tap), labels: T::Array[String], cask_names: T::Array[String], skip_install: T::Boolean,
                new_cask: T::Boolean).returns(T::Array[T::Hash[Symbol,
-                                                              T.any(String, T::Boolean, T::Array[String])]])
+                                                              T.any(String, T::Boolean, T::Array[String],
+                                                                    T::Hash[Symbol, String])]])
       }
       def generate_matrix(tap, labels: [], cask_names: [], skip_install: false, new_cask: false)
         odie "This command must be run from inside a tap directory." unless tap
@@ -249,7 +250,7 @@ module Homebrew
         odie "Maximum job matrix size exceeded: #{jobs}/#{MAX_JOBS}" if jobs > MAX_JOBS
 
         cask_files_to_check.flat_map do |path|
-          cask_token = path.basename(".rb")
+          cask_token = path.basename(".rb").to_s
 
           audit_args = ["--online"]
           audit_args << "--new" if changed_files.fetch(:added_files).include?(path) || new_cask
@@ -275,14 +276,26 @@ module Homebrew
 
           audit_exceptions << %w[token_valid token_bad_words token_conflicts] if labels.include?("ci-skip-token")
 
-          audit_args << "--except" << audit_exceptions.join(",") if audit_exceptions.any?
-
           cask = Cask::CaskLoader.load(path.expand_path)
 
           runners = runners(cask:)
           puts "::warning file=#{path}::No CI runner supports this cask, so it will not be tested." if runners.empty?
 
+          # `macos-15` intermittently fails `signing` on notarized artifacts that other
+          # macOS runners accept, e.g. https://github.com/Homebrew/homebrew-cask/pull/294364,
+          # so skip it there when another macOS runner audits the same URL.
+          macos_urls = runners.reject { |runner| runner.fetch(:symbol) == :linux }.to_h do |runner|
+            tag = Utils::Bottles::Tag.new(system: runner.fetch(:symbol).to_sym, arch: runner.fetch(:arch).to_sym)
+            [runner.fetch(:symbol), cask.refresh_for_tag(tag) { cask.url.to_s }]
+          end
+          skip_sequoia_signing = macos_urls.except(:sequoia).value?(macos_urls[:sequoia])
+
           runners.map do |runner|
+            runner_audit_exceptions = audit_exceptions.dup
+            runner_audit_exceptions << "signing" if skip_sequoia_signing && runner.fetch(:symbol) == :sequoia
+            runner_audit_args = audit_args.dup
+            runner_audit_args << "--except" << runner_audit_exceptions.join(",") if runner_audit_exceptions.any?
+
             runner_output = {
               name:         "test #{cask_token} (#{runner.fetch(:name)}, #{runner.fetch(:arch)})",
               tap:          tap.name,
@@ -290,7 +303,7 @@ module Homebrew
                 token: cask_token,
                 path:  "./#{path}",
               },
-              audit_args:,
+              audit_args:   runner_audit_args,
               fetch_args:   [],
               skip_install: labels.include?("ci-skip-install") || skip_install,
               runner:       runner.fetch(:name),
