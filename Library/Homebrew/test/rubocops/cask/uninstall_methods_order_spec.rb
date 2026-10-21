@@ -317,6 +317,16 @@ RSpec.describe RuboCop::Cop::Cask::UninstallMethodsOrder, :config do
         CASK
       end
     end
+
+    it "does not report an offense when no zap is required" do
+      expect_no_offenses(<<~CASK)
+        cask "foo" do
+          url "https://example.com/foo.zip"
+
+          zap :not_required
+        end
+      CASK
+    end
   end
 
   context "with both uninstall and zap blocks" do

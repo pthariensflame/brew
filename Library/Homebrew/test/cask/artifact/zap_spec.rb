@@ -4,6 +4,19 @@
 require_relative "shared_examples/uninstall_zap"
 
 RSpec.describe Cask::Artifact::Zap, :cask do
+  describe "::from_args" do
+    let(:cask) { Cask::Cask.new("zap-not-required") }
+
+    it "serialises `:not_required` as an empty stanza that older versions can load" do
+      expect(described_class.from_args(cask, :not_required).to_args).to be_empty
+    end
+
+    it "rejects `:not_required` with directives" do
+      expect { described_class.from_args(cask, :not_required, trash: "~/Library/Foo") }
+        .to raise_error(Cask::CaskInvalidError, /:not_required/)
+    end
+  end
+
   describe "directive dispatch" do
     include_examples "uninstall/zap directive dispatch"
 

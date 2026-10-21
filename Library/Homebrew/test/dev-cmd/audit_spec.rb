@@ -92,6 +92,116 @@ RSpec.describe Homebrew::DevCmd::Audit do
       end
     end
 
+    it "audits macOS-only casks under macOS when auditing all operating systems" do
+      macos_url_cask_file = tap_path/"Casks/macos-url-example.rb"
+      macos_url_cask_file.write <<~RUBY
+        cask "macos-url-example" do
+          version "1.0"
+          sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+
+          on_macos do
+            url "https://example.invalid/x-\#{version}.pkg"
+          end
+
+          name "Example"
+          desc "macOS-only cask"
+          homepage "https://example.invalid/"
+
+          depends_on macos: :ventura
+
+          binary "x"
+        end
+      RUBY
+      allow(tap).to receive(:cask_files).and_return([macos_url_cask_file])
+
+      expect { described_class.new(["--tap=homebrew/test", "--os=all", "--arch=arm"]).run }
+        .not_to output.to_stdout
+    end
+
+    it "audits ARM-only casks under ARM when auditing Intel" do
+      arm_url_cask_file = tap_path/"Casks/arm-url-example.rb"
+      arm_url_cask_file.write <<~RUBY
+        cask "arm-url-example" do
+          version "1.0"
+          sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+
+          on_arm do
+            url "https://example.invalid/x-\#{version}.tar.gz"
+          end
+
+          name "Example"
+          desc "ARM-only cask"
+          homepage "https://example.invalid/"
+
+          depends_on arch: :arm64
+
+          binary "x"
+        end
+      RUBY
+      allow(tap).to receive(:cask_files).and_return([arm_url_cask_file])
+
+      Homebrew::SimulateSystem.with(os: :macos, arch: :intel) do
+        expect { audit.run }.not_to output.to_stdout
+      end
+    end
+
+    it "audits casks on the architecture each operating system supports" do
+      os_arch_cask_file = tap_path/"Casks/os-arch-example.rb"
+      os_arch_cask_file.write <<~RUBY
+        cask "os-arch-example" do
+          version "1.0"
+          sha256 arm:          "0000000000000000000000000000000000000000000000000000000000000000",
+                 x86_64_linux: "1111111111111111111111111111111111111111111111111111111111111111"
+
+          url "https://example.invalid/x-\#{version}.tar.gz"
+          name "Example"
+          desc "macOS ARM and Linux Intel cask"
+          homepage "https://example.invalid/"
+
+          on_macos do
+            depends_on arch: :arm64
+          end
+
+          on_linux do
+            depends_on arch: :x86_64
+          end
+
+          binary "x"
+        end
+      RUBY
+      allow(tap).to receive(:cask_files).and_return([os_arch_cask_file])
+
+      expect { described_class.new(["--tap=homebrew/test", "--os=all", "--arch=intel"]).run }
+        .not_to output.to_stdout
+    end
+
+    it "audits Linux Intel for a cask that only requires macOS on ARM" do
+      arm_macos_cask_file = tap_path/"Casks/arm-macos-example.rb"
+      arm_macos_cask_file.write <<~RUBY
+        cask "arm-macos-example" do
+          version "1.0"
+          sha256 arm:         "0000000000000000000000000000000000000000000000000000000000000000",
+                 intel:       "1111111111111111111111111111111111111111111111111111111111111111",
+                 arm64_linux: "0000000000000000000000000000000000000000000000000000000000000000"
+
+          url "https://example.invalid/x-\#{version}.tar.gz"
+          name "Example"
+          desc "Cask without a Linux Intel checksum"
+          homepage "https://example.invalid/"
+
+          on_arm do
+            depends_on macos: :big_sur
+          end
+
+          binary "x"
+        end
+      RUBY
+      allow(tap).to receive(:cask_files).and_return([arm_macos_cask_file])
+
+      expect { described_class.new(["--tap=homebrew/test", "--os=all", "--arch=all"]).run }
+        .to output(/a sha256 stanza is required/).to_stdout
+    end
+
     it "enables API access when auditing external formulae after it was automatically disabled" do
       formula_file = tap_path/"Formula/example.rb"
       formula_file.dirname.mkpath

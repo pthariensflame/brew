@@ -24,8 +24,8 @@ module Homebrew
           The target application should have been launched at least once so that
           preference files and caches exist on disk.
 
-          Outputs `trash`, `delete`, and `rmdir` directives suitable for pasting
-          into a cask definition.
+          Outputs `trash`, `delete` and `rmdir` directives suitable for pasting
+          into a cask definition, or `zap :not_required` if nothing is found.
         EOS
 
         switch "--name",
@@ -123,8 +123,11 @@ module Homebrew
         rmdir_paths = derive_rmdir_candidates(trash_paths + delete_paths)
 
         if trash_paths.empty? && delete_paths.empty?
-          opoo "No files found matching #{format_patterns(patterns)}."
-          puts "# No zap stanza required"
+          opoo <<~EOS
+            No files found matching #{format_patterns(patterns)}.
+            Only use `zap :not_required` if the app has been launched at least once.
+          EOS
+          puts "zap :not_required"
           return
         end
 
