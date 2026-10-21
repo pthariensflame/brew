@@ -117,6 +117,7 @@ RSpec.describe OS::Mac::Xcode, :needs_macos do
       before do
         allow(OS::Mac).to receive(:version).and_return(MacOSVersion.new("26"))
         allow(Hardware::CPU).to receive_messages(intel?: true, physical_cpu_arm64?: false)
+        allow(described_class).to receive(:version).and_return(Version::NULL)
       end
 
       it "accepts the latest Command Line Tools on Intel Tahoe" do
@@ -136,6 +137,54 @@ RSpec.describe OS::Mac::Xcode, :needs_macos do
         allow(described_class).to receive(:detect_clang_version).and_return("2100.1.1.101")
 
         expect(described_class.outdated?).to be true
+      end
+
+      it "does not report unavailable compiler metadata as outdated" do
+        allow(described_class).to receive(:detect_clang_version).and_return(nil)
+
+        expect(described_class.outdated?).to be false
+      end
+
+      context "when the package version is known" do
+        before do
+          allow(described_class).to receive_messages(
+            latest_version:       "27.0",
+            latest_clang_version: "2100.3.34.2",
+            detect_clang_version: "2100.3.34.1",
+          )
+        end
+
+        test_each(%w[27.2.0.0.1792148227 27.0.1.0.1792148227]) do |version|
+          it "accepts CLT #{version} despite its lower compiler build" do
+            allow(described_class).to receive(:version).and_return(Version.new(version))
+
+            expect(described_class.outdated?).to be false
+          end
+        end
+
+        it "checks the compiler when only the receipt timestamp is newer" do
+          allow(described_class).to receive(:version).and_return(Version.new("27.0.0.0.1792148227"))
+
+          expect(described_class.outdated?).to be true
+        end
+
+        it "still reports an older release with an older compiler" do
+          allow(described_class).to receive_messages(
+            version:              Version.new("26.6.0.0.1792148227"),
+            detect_clang_version: "2100.1.1.101",
+          )
+
+          expect(described_class.outdated?).to be true
+        end
+
+        it "accepts the recommended release with the current compiler" do
+          allow(described_class).to receive_messages(
+            version:              Version.new("27.0.0.0.1792148227"),
+            detect_clang_version: "2100.3.34.2",
+          )
+
+          expect(described_class.outdated?).to be false
+        end
       end
     end
 
