@@ -1661,7 +1661,7 @@ _brew_generate_zap() {
   _arguments \
     '--debug[Display any debugging information]' \
     '--help[Show this message]' \
-    '--name[Treat the argument as a raw application name instead of a cask token]' \
+    '--name[Treat the argument as a raw application name instead of a cask token. Also matches the app'\''s bundle identifier if it is installed in `/Applications`]' \
     '--quiet[Make some output more quiet]' \
     '--verbose[Make some output more verbose]'
 }

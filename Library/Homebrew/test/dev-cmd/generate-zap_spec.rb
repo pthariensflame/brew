@@ -43,6 +43,19 @@ RSpec.describe Homebrew::DevCmd::GenerateZap do
       end.to raise_error(SystemExit)
         .and output(/Full Disk Access/).to_stderr
     end
+
+    it "also matches the bundle identifier of an installed app with `--name`" do
+      generate_zap = described_class.new(["--name", "Test"])
+
+      allow(generate_zap).to receive_messages(scan_directories: [], scan_home_root: [])
+      allow(generate_zap).to receive(:patterns_from_app_paths)
+        .with([Pathname.new("/Applications/Test.app")])
+        .and_return(["Test", "com.example.test"])
+
+      expect { generate_zap.run }
+        .to output(/Scanning for files matching "Test" and "com.example.test"/).to_stdout
+        .and output.to_stderr
+    end
   end
 
   describe "#resolve_patterns_from_cask" do

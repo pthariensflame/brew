@@ -1269,7 +1269,7 @@ __fish_brew_complete_arg 'generate-vulns-advisories' -l verbose -d 'Make some ou
 __fish_brew_complete_cmd 'generate-zap' 'Generate a `zap` stanza for a cask by scanning the system for associated files and directories'
 __fish_brew_complete_arg 'generate-zap' -l debug -d 'Display any debugging information'
 __fish_brew_complete_arg 'generate-zap' -l help -d 'Show this message'
-__fish_brew_complete_arg 'generate-zap' -l name -d 'Treat the argument as a raw application name instead of a cask token'
+__fish_brew_complete_arg 'generate-zap' -l name -d 'Treat the argument as a raw application name instead of a cask token. Also matches the app\'s bundle identifier if it is installed in `/Applications`'
 __fish_brew_complete_arg 'generate-zap' -l quiet -d 'Make some output more quiet'
 __fish_brew_complete_arg 'generate-zap' -l verbose -d 'Make some output more verbose'
 
