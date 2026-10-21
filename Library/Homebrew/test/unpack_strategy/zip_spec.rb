@@ -79,8 +79,9 @@ RSpec.describe UnpackStrategy::Zip do
     let(:zip_path) { root/"volume-label.zip" }
 
     # A member reads as a volume label when its host is FAT (0) and its MS-DOS attributes
-    # set the label bit (0x08), and as a symlink when its host is Unix (3) and its mode
-    # says so. `unzip` skips the former and names it on stderr, which is what gets scraped.
+    # set the label bit (0x08). `unzip` skips it and names it on stderr, which is what gets
+    # scraped. Same-named symlinks are planted in `unpack_dir` rather than archived because
+    # newer `unzip` versions refuse symlink members with absolute or escaping targets.
     def write_zip(path, members)
       local = +""
       central = +""
@@ -100,7 +101,8 @@ RSpec.describe UnpackStrategy::Zip do
     it "does not move the label member through a planted symlink of the same name" do
       outside = (root/"outside").tap(&:mkpath)
       name = "A" * 24
-      write_zip(zip_path, [[name, "label\n", 0, 0x08], [name, outside.to_s, 3, 0120777 << 16]])
+      write_zip(zip_path, [[name, "label\n", 0, 0x08]])
+      (unpack_dir/name).make_symlink(outside)
 
       described_class.new(zip_path).extract(to: unpack_dir)
 
@@ -113,7 +115,8 @@ RSpec.describe UnpackStrategy::Zip do
       victim = root/"victim"
       victim.write "original\n"
       name = "A" * 24
-      write_zip(zip_path, [[name, "label\n", 0, 0x08], [name, victim.to_s, 3, 0120777 << 16]])
+      write_zip(zip_path, [[name, "label\n", 0, 0x08]])
+      (unpack_dir/name).make_symlink(victim)
       allow(File).to receive(:rename).and_raise(Errno::EXDEV)
 
       described_class.new(zip_path).extract(to: unpack_dir)
