@@ -348,6 +348,7 @@ module OS
       def self.outdated?
         clang_version = detect_clang_version
         return false unless clang_version
+        return false if !version.null? && version.major_minor_patch > latest_version
 
         ::Version.new(clang_version) < latest_clang_version
       end
