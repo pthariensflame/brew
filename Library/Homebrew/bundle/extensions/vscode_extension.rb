@@ -184,11 +184,6 @@ module Homebrew
           packages - kept_extensions
         end
 
-        sig { override.params(_executable: Pathname).returns(T::Hash[String, String]) }
-        def package_manager_env(_executable)
-          {}
-        end
-
         sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
         def uninstall_package!(name, executable: Pathname.new(""))
           Kernel.system(executable.to_s, "--uninstall-extension", name) == true

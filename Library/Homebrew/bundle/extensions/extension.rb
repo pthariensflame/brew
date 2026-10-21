@@ -64,9 +64,9 @@ module Homebrew
         package_manager_executable || raise("#{package_manager_name} is not installed")
       end
 
-      sig { params(executable: Pathname).returns(T::Hash[String, String]) }
-      def self.package_manager_env(executable)
-        { "PATH" => "#{executable.dirname}:#{ORIGINAL_PATHS.join(":")}" }
+      sig { params(_executable: Pathname).returns(T::Hash[String, String]) }
+      def self.package_manager_env(_executable)
+        {}
       end
 
       sig {

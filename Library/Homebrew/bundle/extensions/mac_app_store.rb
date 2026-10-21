@@ -154,11 +154,6 @@ module Homebrew
                   .map { |app| cleanup_item(app) }
         end
 
-        sig { override.params(_executable: Pathname).returns(T::Hash[String, String]) }
-        def package_manager_env(_executable)
-          {}
-        end
-
         sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
         def uninstall_package!(name, executable: Pathname.new(""))
           Bundle.system(executable, "uninstall", parse_cleanup_item(name).id, verbose: false)

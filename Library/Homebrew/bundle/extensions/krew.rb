@@ -33,6 +33,11 @@ module Homebrew
           @package_manager_executable ||= T.let(which("kubectl-krew", ORIGINAL_PATHS), T.nilable(Pathname))
         end
 
+        sig { override.params(executable: Pathname).returns(T::Hash[String, String]) }
+        def package_manager_env(executable)
+          { "PATH" => "#{executable.dirname}:#{ORIGINAL_PATHS.join(":")}" }
+        end
+
         sig { override.returns(T::Array[String]) }
         def packages
           packages = @packages
