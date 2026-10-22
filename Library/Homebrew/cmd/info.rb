@@ -178,8 +178,6 @@ module Homebrew
 
       sig { params(tab: T.any(Tab, Cask::Tab)).returns(String) }
       def self.installation_status(tab)
-        # TODO: Deprecate reading `installed_as_dependency`; `installed_on_request`
-        # is the only state we need to render install intent.
         tab.installed_on_request ? "Installed (on request)" : "Installed (as dependency)"
       end
 
