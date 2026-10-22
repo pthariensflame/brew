@@ -98,7 +98,10 @@ module Homebrew
         sig { override.params(items: T::Array[String]).void }
         def cleanup!(items)
           go = package_manager_executable
-          return if go.nil?
+          if go.nil?
+            ofail "Failed to remove Go executables: go executable not found" unless items.empty?
+            return
+          end
 
           gobin = Utils.popen_read(go, "env", "GOBIN", err: :err).chomp
           gopath = Utils.popen_read(go, "env", "GOPATH", err: :err).chomp
@@ -118,10 +121,17 @@ module Homebrew
             module_path = path_line.split("\t")[2]&.strip
             next unless items.include?(module_path)
 
-            FileUtils.rm_f(binary)
+            begin
+              File.unlink(binary)
+            rescue Errno::ENOENT
+              next
+            rescue SystemCallError => e
+              ofail "Failed to remove Go executable #{binary}: #{e}"
+              next
+            end
             removed += 1
           end
-          puts "Uninstalled #{removed} #{banner_name}#{"s" if removed != 1}"
+          puts "Removed #{Utils.pluralize("Go executable", removed, include_count: true)}"
         end
       end
     end

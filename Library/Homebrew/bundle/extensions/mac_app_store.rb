@@ -154,15 +154,9 @@ module Homebrew
                   .map { |app| cleanup_item(app) }
         end
 
-        sig { override.params(items: T::Array[String]).void }
-        def cleanup!(items)
-          mas = package_manager_executable
-          return if mas.nil?
-
-          items.each do |item|
-            Bundle.system(mas, "uninstall", parse_cleanup_item(item).id, verbose: false)
-          end
-          puts "Uninstalled #{items.size} Mac App Store app#{"s" if items.size != 1}"
+        sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
+        def uninstall_package!(name, executable: Pathname.new(""))
+          Bundle.system(executable, "uninstall", parse_cleanup_item(name).id, verbose: false)
         end
 
         sig { params(id: Integer).returns(T::Boolean) }

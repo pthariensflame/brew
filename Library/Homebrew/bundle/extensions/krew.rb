@@ -33,6 +33,11 @@ module Homebrew
           @package_manager_executable ||= T.let(which("kubectl-krew", ORIGINAL_PATHS), T.nilable(Pathname))
         end
 
+        sig { override.params(executable: Pathname).returns(T::Hash[String, String]) }
+        def package_manager_env(executable)
+          { "PATH" => "#{executable.dirname}:#{ORIGINAL_PATHS.join(":")}" }
+        end
+
         sig { override.returns(T::Array[String]) }
         def packages
           packages = @packages
@@ -82,7 +87,7 @@ module Homebrew
         end
         private :parse_plugin_list
 
-        sig { override.params(name: String, executable: Pathname).void }
+        sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
         def uninstall_package!(name, executable: Pathname.new(""))
           Bundle.system(executable.to_s, "uninstall", name, verbose: false)
         end

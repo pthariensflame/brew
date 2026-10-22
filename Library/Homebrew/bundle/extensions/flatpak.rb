@@ -408,12 +408,9 @@ module Homebrew
           packages - kept_flatpaks
         end
 
-        sig { params(flatpaks: T::Array[String]).void }
-        def cleanup!(flatpaks)
-          flatpaks.each do |flatpak_name|
-            Kernel.system("flatpak", "uninstall", "-y", "--system", flatpak_name)
-          end
-          puts "Uninstalled #{flatpaks.size} flatpak#{"s" if flatpaks.size != 1}"
+        sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
+        def uninstall_package!(name, executable: Pathname.new(""))
+          Kernel.system(executable.to_s, "uninstall", "-y", "--system", name) == true
         end
       end
 

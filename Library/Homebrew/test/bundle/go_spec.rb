@@ -134,6 +134,26 @@ RSpec.describe Homebrew::Bundle::Go do
         .to eql(%w[github.com/golangci/golangci-lint/v2/cmd/golangci-lint])
     end
 
+    it "reports a missing executable when removals are queued" do
+      Homebrew.failed = false
+      allow(described_class).to receive(:package_manager_executable).and_return(nil)
+
+      expect do
+        described_class.cleanup!(["example.com/tools/example"])
+      end.to(
+        change(Homebrew, :failed?).from(false).to(true)
+          .and(output(/Failed to remove Go executables: go executable not found/).to_stderr),
+      )
+    end
+
+    it "does not report a missing executable when no removals are queued" do
+      allow(described_class).to receive(:package_manager_executable).and_return(nil)
+
+      expect do
+        described_class.cleanup!([])
+      end.to(output("").to_stderr.and(output("").to_stdout))
+    end
+
     it "removes binaries by their literal names" do
       binary = "/Users/test/go/bin/cr;ush $(touch pwned)"
       allow(described_class).to receive(:`).and_raise("Shell execution is not permitted")
@@ -148,9 +168,70 @@ RSpec.describe Homebrew::Bundle::Go do
       allow(Utils).to receive(:popen_read).with(Pathname("go"), "version", "-m", binary, err: File::NULL)
                                           .and_return("\tpath\tgithub.com/charmbracelet/crush\n")
 
-      expect(FileUtils).to receive(:rm_f).with(binary)
+      expect(File).to receive(:unlink).with(binary)
 
       described_class.cleanup!(["github.com/charmbracelet/crush"])
+    end
+
+    context "with selected executables" do
+      let(:executables) { %w[/tmp/go/bin/first /tmp/go/bin/second] }
+
+      before do
+        Homebrew.failed = false
+        allow(Utils).to receive(:popen_read)
+          .with(Pathname("go"), "env", "GOBIN", err: :err).and_return("/tmp/go/bin")
+        allow(Utils).to receive(:popen_read)
+          .with(Pathname("go"), "env", "GOPATH", err: :err).and_return("/tmp/go")
+        allow(File).to receive(:directory?).with("/tmp/go/bin").and_return(true)
+        allow(Dir).to receive(:glob).with("/tmp/go/bin/*").and_return(executables)
+        executables.each do |executable|
+          allow(File).to receive(:executable?).with(executable).and_return(true)
+          allow(File).to receive(:directory?).with(executable).and_return(false)
+          allow(File).to receive(:symlink?).with(executable).and_return(false)
+          allow(Utils).to receive(:popen_read)
+            .with(Pathname("go"), "version", "-m", executable, err: File::NULL)
+            .and_return("\tpath\texample.com/tools/example\n")
+          allow(File).to receive(:unlink).with(executable).and_return(1)
+        end
+      end
+
+      it "counts removed executables rather than packages" do
+        expect do
+          described_class.cleanup!(["example.com/tools/example"])
+        end.to output("Removed 2 Go executables\n").to_stdout.and output("").to_stderr
+      end
+
+      it "does not mark successful cleanup as failed" do
+        allow(described_class).to receive(:puts)
+
+        expect do
+          described_class.cleanup!(["example.com/tools/example"])
+        end.not_to change(Homebrew, :failed?)
+      end
+
+      it "reports deletion errors and continues with the next executable" do
+        expect(File).to receive(:unlink).with(executables.first).ordered.and_raise(Errno::EACCES)
+        expect(File).to receive(:unlink).with(executables.last).ordered.and_return(1)
+
+        expect do
+          described_class.cleanup!(["example.com/tools/example"])
+        end.to(
+          change(Homebrew, :failed?).from(false).to(true)
+            .and(output("Removed 1 Go executable\n").to_stdout)
+            .and(output(
+              a_string_including("Failed to remove Go executable /tmp/go/bin/first"),
+            ).to_stderr),
+        )
+      end
+
+      it "does not count an already absent executable as removed" do
+        allow(File).to receive(:unlink).with(executables.first).and_raise(Errno::ENOENT)
+
+        expect do
+          described_class.cleanup!(["example.com/tools/example"])
+        end.to output("Removed 1 Go executable\n").to_stdout
+                                                  .and output("").to_stderr
+      end
     end
 
     it "returns frozen empty array when go is not installed" do

@@ -350,7 +350,28 @@ RSpec.describe Homebrew::Bundle::MacAppStore do
       expect(Homebrew::Bundle).to receive(:system).with(Pathname("mas"), "uninstall", "456", verbose: false)
                                                   .and_return(true)
 
-      expect { described_class.cleanup!(items) }.to output(/Uninstalled 1 Mac App Store app/).to_stdout
+      expect { described_class.cleanup!(items) }.to output("Uninstalled 1 app\n").to_stdout
+    end
+
+    it "reports failed removals by readable app name without changing PATH" do
+      Homebrew.failed = false
+      ENV["PATH"] = "/usr/bin:/bin"
+      items = described_class.cleanup_items([Homebrew::Bundle::Dsl::Entry.new(:mas, "foo", id: 123)])
+      allow(Homebrew::Bundle).to receive(:system)
+        .with(Pathname("mas"), "uninstall", "456", verbose: false) do
+        expect(ENV.fetch("PATH")).to eq("/usr/bin:/bin")
+        false
+      end
+
+      expect do
+        described_class.cleanup!(items)
+      end.to(
+        change(Homebrew, :failed?).from(false).to(true)
+          .and(output(
+            a_string_including("Failed to uninstall Mac App Store dependencies: bar (456)"),
+          ).to_stderr)
+          .and(output("Uninstalled 0 apps\n").to_stdout),
+      )
     end
   end
 end

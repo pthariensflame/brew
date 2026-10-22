@@ -39,6 +39,11 @@ module Homebrew
           which("npm", ORIGINAL_PATHS)
         end
 
+        sig { override.params(executable: Pathname).returns(T::Hash[String, String]) }
+        def package_manager_env(executable)
+          { "PATH" => "#{executable.dirname}:#{ORIGINAL_PATHS.join(":")}" }
+        end
+
         sig { override.params(name: String, _options: Homebrew::Bundle::EntryOptions).returns(String) }
         def install_verb(name = "", _options = {})
           package_installed?(name) ? "Upgrading" : "Installing"
@@ -141,7 +146,7 @@ module Homebrew
           @outdated_packages = []
         end
 
-        sig { override.params(name: String, executable: Pathname).void }
+        sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
         def uninstall_package!(name, executable: Pathname.new(""))
           Bundle.system(executable.to_s, "uninstall", "-g", name, verbose: false)
         end

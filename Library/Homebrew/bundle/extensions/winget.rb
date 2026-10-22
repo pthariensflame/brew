@@ -322,17 +322,11 @@ module Homebrew
           packages_to_cleanup.map { |app| cleanup_item(app) }
         end
 
-        sig { override.params(items: T::Array[String]).void }
-        def cleanup!(items)
-          winget = package_manager_executable
-          return if winget.nil?
-
-          items.each do |item|
-            app = parse_cleanup_item(item)
-            Bundle.system(winget, "uninstall", "--id", app.id, "--exact", "--source", app.source,
-                          "--accept-source-agreements", "--disable-interactivity", verbose: false)
-          end
-          puts "Uninstalled #{items.size} WinGet package#{"s" if items.size != 1}"
+        sig { override.params(name: String, executable: Pathname).returns(T::Boolean) }
+        def uninstall_package!(name, executable: Pathname.new(""))
+          app = parse_cleanup_item(name)
+          Bundle.system(executable, "uninstall", "--id", app.id, "--exact", "--source", app.source,
+                        "--accept-source-agreements", "--disable-interactivity", verbose: false)
         end
 
         sig { params(id: String, source: String).returns(T::Boolean) }

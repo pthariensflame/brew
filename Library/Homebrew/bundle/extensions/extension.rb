@@ -9,6 +9,7 @@ module Homebrew
 
     class Extension < Homebrew::Bundle::PackageType
       extend T::Helpers
+      extend Utils::Output::Mixin
 
       abstract!
 
@@ -63,9 +64,9 @@ module Homebrew
         package_manager_executable || raise("#{package_manager_name} is not installed")
       end
 
-      sig { params(executable: Pathname).returns(T::Hash[String, String]) }
-      def self.package_manager_env(executable)
-        { "PATH" => "#{executable.dirname}:#{ORIGINAL_PATHS.join(":")}" }
+      sig { params(_executable: Pathname).returns(T::Hash[String, String]) }
+      def self.package_manager_env(_executable)
+        {}
       end
 
       sig {
@@ -239,17 +240,22 @@ module Homebrew
       sig { params(items: T::Array[String]).void }
       def self.cleanup!(items)
         executable = package_manager_executable
-        return if executable.nil?
+        if executable.nil?
+          ofail "Failed to uninstall #{banner_name}: executable not found" unless items.empty?
+          return
+        end
 
-        with_env(package_manager_env(executable)) do
-          items.each do |name|
-            uninstall_package!(name, executable:)
+        successes = with_env(package_manager_env(executable)) do
+          items.count do |item|
+            success = uninstall_package!(item, executable:)
+            ofail "Failed to uninstall #{banner_name}: #{cleanup_item_name(item)}" unless success
+            success
           end
         end
-        puts "Uninstalled #{items.size} #{banner_name}#{"s" if items.size != 1}"
+        puts "Uninstalled #{Utils.pluralize(package_description, successes, include_count: true)}"
       end
 
-      sig { params(name: String, executable: Pathname).void }
+      sig { params(name: String, executable: Pathname).returns(T::Boolean) }
       def self.uninstall_package!(name, executable: Pathname.new(""))
         raise NotImplementedError, "#{self} must override `uninstall_package!` or `cleanup!`."
       end

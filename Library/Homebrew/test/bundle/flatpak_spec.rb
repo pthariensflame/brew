@@ -6,6 +6,35 @@ require "bundle/dsl"
 require "bundle/extensions/flatpak"
 
 RSpec.describe Homebrew::Bundle::Flatpak do
+  describe "cleanup" do
+    test_each([false, nil]) do |result|
+      it "continues after #{result.inspect} with the resolved executable and unchanged environment" do
+        Homebrew.failed = false
+        ENV["PATH"] = "/usr/bin:/bin"
+        allow(described_class).to receive(:package_manager_executable)
+          .and_return(Pathname("/example/bin/flatpak"))
+        expect(Kernel).to receive(:system)
+          .with("/example/bin/flatpak", "uninstall", "-y", "--system", "org.example.App").ordered do
+          expect(ENV.fetch("PATH")).to eq("/usr/bin:/bin")
+          result
+        end
+        expect(Kernel).to receive(:system)
+          .with("/example/bin/flatpak", "uninstall", "-y", "--system", "org.example.Second")
+          .ordered.and_return(true)
+
+        expect do
+          described_class.cleanup!(%w[org.example.App org.example.Second])
+        end.to(
+          change(Homebrew, :failed?).from(false).to(true)
+            .and(output(
+              a_string_including("Failed to uninstall Flatpak packages: org.example.App"),
+            ).to_stderr)
+            .and(output("Uninstalled 1 flatpak\n").to_stdout),
+        )
+      end
+    end
+  end
+
   describe "checking" do
     subject(:checker) { described_class.new }
 
