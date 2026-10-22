@@ -31,6 +31,8 @@ module UnpackStrategy
         ".VolumeIcon.icns",
         ".HFS+ Private Directory Data\r", # do not remove `\r`, it is a part of directory name
         ".HFS+ Private Data\r",
+        "Desktop DB",
+        "Desktop DF",
       ]).freeze, T::Set[String])
       private_constant :DMG_METADATA
 
