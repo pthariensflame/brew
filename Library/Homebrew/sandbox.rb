@@ -220,6 +220,7 @@ class Sandbox
     new.tap do |sandbox|
       sandbox.deny_read_home(except: home_read_exception)
       sandbox.deny_all_network unless network_access
+      sandbox.allow_network(path: "/", type: :subpath) if network_access && home_read_exception == :git
       (read_paths | write_paths).each { |path| sandbox.allow_read(path:, type: :subpath) }
       write_paths.each { |path| sandbox.allow_write_path(path) }
       sandbox.deny_write_homebrew_repository
@@ -412,6 +413,16 @@ class Sandbox
   sig { params(path: T.any(String, Pathname)).void }
   def deny_read_path(path)
     deny_read path:, type: :subpath
+  end
+
+  # Explicit read restrictions on literal paths and subpaths.
+  sig { returns(T::Array[String]) }
+  def denied_read_paths
+    profile.rules.filter_map do |rule|
+      next if rule.allow || rule.operation != "file-read*" || rule.filter&.type == :regex
+
+      rule.filter&.path
+    end
   end
 
   sig { params(except: T.nilable(Symbol)).void }

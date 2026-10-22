@@ -95,6 +95,19 @@ RSpec.describe Sandbox do
     end
   end
 
+  describe "#denied_read_paths" do
+    it "lists literal paths and subpaths without allowed paths, writes or regex rules" do
+      directory = mktmpdir
+      sandbox.deny_read(path: directory/"literal")
+      sandbox.deny_read_path(directory/"subpath")
+      sandbox.allow_read(path: directory/"allowed")
+      sandbox.deny_write_path(directory/"write")
+      sandbox.deny_read(path: "regex", type: :regex)
+
+      expect(sandbox.denied_read_paths).to contain_exactly((directory/"literal").to_s, (directory/"subpath").to_s)
+    end
+  end
+
   describe "#capture" do
     before do
       allow(sandbox).to receive(:sandbox_command) { |args, _tmpdir| args }

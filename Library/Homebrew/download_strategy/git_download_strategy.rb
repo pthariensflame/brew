@@ -82,31 +82,44 @@ class GitDownloadStrategy < VCSDownloadStrategy
     args << "--end-of-options" << @url << cached_location.to_s
   end
 
+  # Capture non-interactive Git output using the download environment and permissions.
+  sig {
+    params(sandbox: Sandbox, args: String, timeout: T.nilable(T.any(Float, Integer)))
+      .returns(SystemCommand::Result)
+  }
+  def self.sandboxed_git(sandbox, *args, timeout: nil)
+    require "utils/git"
+
+    sandbox.capture(
+      "/usr/bin/env",
+      args: [*sandboxed_env.map { |key, value| "#{key}=#{value}" }, Utils::Git.git, *args],
+      timeout:, must_succeed: false, print_stderr: false, debug: false, verbose: false
+    )
+  end
+
+  # Preserve user configuration, helper executables and SSH agents during downloads.
+  sig { returns(T::Hash[String, String]) }
+  def self.sandboxed_env
+    {
+      "GIT_TERMINAL_PROMPT" => "0",
+      "HOME"                => Dir.home(ENV.fetch("USER")),
+      "PATH"                => PATH.new(ENV.fetch("PATH"), ORIGINAL_PATHS).to_s,
+      "SSH_ASKPASS"         => "/usr/bin/false",
+      "SSH_ASKPASS_REQUIRE" => "force",
+    }.merge(ENV.slice("SSH_AUTH_SOCK"))
+  end
+
   private
 
   sig { override.returns(Symbol) }
   def fetch_home_read_exception = :git
-
-  sig { override.params(sandbox: Sandbox).void }
-  def allow_fetch_credentials(sandbox)
-    # Let Git and SSH resolve configuration, includes, URL rewrites and agent sockets.
-    sandbox.allow_network(path: "/", type: :subpath)
-  end
 
   # Read user Git config so credential helpers work for private downloads,
   # but never block on an interactive credential prompt.
   sig { override.returns(T::Hash[String, String]) }
   def env
     { "GIT_TERMINAL_PROMPT" => "0" }.tap do |env|
-      if fetching? && Sandbox.isolate_operation?
-        env["HOME"] = Dir.home(ENV.fetch("USER"))
-        env["PATH"] = PATH.new(ENV.fetch("PATH"), ORIGINAL_PATHS).to_s
-        env["SSH_ASKPASS"] = "/usr/bin/false"
-        env["SSH_ASKPASS_REQUIRE"] = "force"
-        if (socket = ENV.fetch("SSH_AUTH_SOCK", nil))
-          env["SSH_AUTH_SOCK"] = socket
-        end
-      end
+      env.merge!(self.class.sandboxed_env) if fetching? && Sandbox.isolate_operation?
       next if !fetching? || !(token = Homebrew::EnvConfig.github_api_token) || !which("gh", ORIGINAL_PATHS)
 
       env["PATH"] ||= PATH.new(ENV.fetch("PATH"), ORIGINAL_PATHS).to_s

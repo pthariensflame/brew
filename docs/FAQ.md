@@ -99,9 +99,17 @@ ssh-add ~/.ssh/id_ed25519 # If the required key is missing.
 
 The following do not work for sandboxed Git downloads:
 
+* Configuration includes, credential helpers or supporting files in sandbox-restricted locations: run `brew doctor` to identify errors loading configuration and any matching restricted paths.
+  Move required files to accessible locations and update the configuration; Homebrew does not grant extra access to configured paths.
 * Helpers that read the macOS login keychain: the sandbox blocks keychain access to protect unrelated credentials.
 * Bare `GH_TOKEN` or arbitrary token variables: Homebrew filters the environment to limit credential exposure; select the token through `HOMEBREW_GITHUB_API_TOKEN` instead.
 * Interactive password or key-passphrase prompts: Homebrew disables them to prevent unattended downloads from hanging.
+
+The Git check only reads configuration, with a ten-second timeout plus process cleanup time.
+It reports unsuccessful queries and sandbox setup failures.
+It does not run credential helpers or make remote requests.
+The check is skipped inside another sandbox and runs outside repositories.
+It cannot verify authentication, credential helpers, repository-dependent includes or files Git does not read during the check.
 
 ## My macOS `.app`s don’t find Homebrew utilities
 
