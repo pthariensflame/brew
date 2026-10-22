@@ -3524,8 +3524,8 @@ resolved from the cask's `app` artifact.
 The target application should have been launched at least once so that
 preference files and caches exist on disk.
 
-Outputs `trash`, `delete`, and `rmdir` directives suitable for pasting into a
-cask definition.
+Outputs `trash`, `delete` and `rmdir` directives suitable for pasting into a
+cask definition, or `zap :not_required` if nothing is found.
 
 `--name`
 

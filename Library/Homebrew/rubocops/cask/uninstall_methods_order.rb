@@ -28,7 +28,7 @@ module RuboCop
           return unless [:zap, :uninstall].include?(node.method_name)
 
           hash_node = node.arguments.first
-          return if hash_node.nil? || (!hash_node.is_a?(AST::Node) && !hash_node.hash_type?)
+          return unless hash_node.is_a?(AST::HashNode)
 
           comments = processed_source.comments
 

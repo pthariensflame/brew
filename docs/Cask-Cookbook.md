@@ -126,7 +126,7 @@ An exception is `target:` which typically consists of short lines.
 ### Required stanzas
 
 Each cask requires the identity and download stanzas below.
-Submissions to `homebrew/cask` may require additional stanzas such as `livecheck`, `depends_on`, `uninstall` or `zap` when the package needs them.
+New submissions to `homebrew/cask` also require a [`zap`](#stanza-zap) stanza and may require additional stanzas such as `livecheck`, `depends_on` or `uninstall` when the package needs them.
 
 | name                               | multiple occurrences allowed? | value |
 | ---------------------------------- | :---------------------------: | ----- |
@@ -211,7 +211,7 @@ Allowing writes to a directory does not allow connections to sockets in it.
 | [`caveats`](#stanza-caveats)               | yes                           | String or Ruby block providing the user with cask-specific information at install time. |
 | [`livecheck`](#stanza-livecheck)           | no                            | Ruby block describing how to find updates when automatic detection is insufficient. It is not used with `version :latest` unless the block uses `skip`. |
 | [`depends_on`](#stanza-depends_on)         | yes                           | Dependencies and operating-system or architecture requirements for this cask. |
-| [`zap`](#stanza-zap)                       | no                            | Additional procedures for a more complete uninstall, including user files and shared resources. |
+| [`zap`](#stanza-zap)                       | no                            | Additional procedures for a more complete uninstall, including user files and shared resources. Required for new casks in `homebrew/cask`. |
 | [`deprecate!`](#stanza-deprecate--disable) | no                            | Date as a string in `YYYY-MM-DD` format and a string or symbol providing a reason. |
 | [`disable!`](#stanza-deprecate--disable)   | no                            | Date as a string in `YYYY-MM-DD` format and a string or symbol providing a reason. |
 | `preflight_steps`                          | yes                           | Declarative file preparation steps run before artifact installation. |
@@ -1323,6 +1323,8 @@ brew uninstall --zap --force firefox
 
 The form of the `zap` stanza follows the [`uninstall`](#stanza-uninstall) stanza. All the same directives are available. The `trash:` key is preferred over `delete:`.
 
+Use `zap :not_required` instead of directives when there is nothing to zap (see [`zap` creation](#zap-creation)).
+
 Example: [dropbox.rb](https://github.com/Homebrew/homebrew-cask/blob/974a55ade77bb4edc8bbb80ef72eec83ae0e76c0/Casks/d/dropbox.rb#L30-L68)
 
 #### `zap` creation
@@ -1335,11 +1337,14 @@ Manual creation can be facilitated with:
 * An uninstaller tool such as [AppCleaner](https://formulae.brew.sh/cask/appcleaner)
 * Inspection of the usual paths, i.e. `/Library/{'Application Support',LaunchAgents,LaunchDaemons,Frameworks,Logs,Preferences,PrivilegedHelperTools}` and `~/Library/{'Application Support',Caches,Containers,LaunchAgents,Logs,Preferences,'Saved Application State'}`
 
-If no additional files are discovered, instead of a zap stanza, include the following comment:
+If no additional files are discovered, declare that nothing needs to be zapped instead:
 
 ```ruby
-# No zap stanza required
+zap :not_required
 ```
+
+A cask that supports Linux and has its `zap` stanza inside an `on_macos` block also needs a `zap` stanza or `zap :not_required` inside its `on_linux` block.
+`brew generate-zap` only scans macOS paths, so write a Linux `zap` stanza by hand.
 
 ## Conditional statements
 

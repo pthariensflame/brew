@@ -266,9 +266,14 @@ module Homebrew
           path = cask.sourcefile_path
 
           errors = os_arch_combinations.flat_map do |os, arch|
-            # Linux-only casks have no stanza values for macOS, so audit them
-            # under Linux instead.
+            # Casks have no stanza values for platforms they don't support, so
+            # audit them on one they do instead. `depends_on arch` can differ
+            # between OSes, so read it on the OS being audited.
             os = :linux if os != :linux && !cask.supports_macos?
+            os = :macos if os == :linux && !cask.supports_linux?
+            cask_archs = SimulateSystem.with(os:, arch:) { Cask::CaskLoader.load(path) }
+                                       .depends_on.arch&.map { |cask_arch| cask_arch[:type] }
+            arch = OnSystem::ARCH_OPTIONS.find { cask_archs.include?(it) } if cask_archs&.exclude?(arch)
 
             SimulateSystem.with(os:, arch:) do
               odebug "Auditing Cask #{cask} on os #{os} and arch #{arch}"

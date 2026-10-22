@@ -1780,6 +1780,72 @@ RSpec.describe Cask::Audit, :cask do
       end
     end
 
+    describe "zap required" do
+      subject(:run) { Homebrew::SimulateSystem.with(os:) { audit.run! } }
+
+      let(:only) { ["zap_required"] }
+      let(:new_cask) { true }
+      let(:os) { :sequoia }
+      let(:message) { /New casks must have a `zap` stanza/ }
+      let(:tap) { CoreCaskTap.instance }
+      let(:stanzas) { nil }
+      let(:cask) do
+        extra_stanzas = stanzas
+        Cask::Cask.new("zap-required", tap:) do
+          version "1.0"
+          sha256 :no_check
+          url "https://brew.sh/zap-required.dmg"
+          homepage "https://brew.sh"
+
+          instance_eval(&extra_stanzas) if extra_stanzas
+        end
+      end
+
+      context "when the cask has no zap stanza" do
+        it do
+          expect(run).to error_with(
+            /Generate one with `brew generate-zap zap-required` or use `zap :not_required`/,
+          )
+        end
+      end
+
+      context "when the cask is not new" do
+        let(:new_cask) { false }
+
+        it { is_expected.not_to error_with(message) }
+      end
+
+      context "when the cask is not in an official tap" do
+        let(:tap) { nil }
+
+        it { is_expected.not_to error_with(message) }
+      end
+
+      context "when the cask has `zap :not_required`" do
+        let(:stanzas) { proc { zap :not_required } }
+
+        it { is_expected.not_to error_with(message) }
+      end
+
+      context "when the cask only has a zap stanza on macOS" do
+        let(:stanzas) do
+          proc do
+            on_macos do
+              zap trash: "~/Library/Preferences/sh.brew.zap-required.plist"
+            end
+          end
+        end
+
+        it { is_expected.not_to error_with(message) }
+
+        context "when auditing Linux" do
+          let(:os) { :linux }
+
+          it { is_expected.to error_with(/Add one or use `zap :not_required`/) }
+        end
+      end
+    end
+
     describe "GitHub repository notability" do
       let(:only) { ["github_repository"] }
       let(:new_cask) { true }

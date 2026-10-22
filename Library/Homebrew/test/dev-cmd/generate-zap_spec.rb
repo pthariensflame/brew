@@ -22,8 +22,8 @@ RSpec.describe Homebrew::DevCmd::GenerateZap do
     CoreCaskTap.instance.clear_cache
 
     expect { brew "generate-zap", caskfile }
-      .to output(/Scanning for files matching.*No zap stanza required/m).to_stdout
-      .and output(/No files found matching/).to_stderr
+      .to output(/Scanning for files matching.*zap :not_required/m).to_stdout
+      .and output(/No files found matching.*Only use `zap :not_required` if the app has been launched/m).to_stderr
       .and be_a_success
   end
 

@@ -358,6 +358,23 @@ module Cask
     end
 
     sig { void }
+    def audit_zap_required
+      return unless new_cask?
+      return unless cask.tap&.official?
+      return if cask.artifacts.any?(Artifact::Zap)
+
+      zap_suggestion = if Homebrew::SimulateSystem.simulating_or_running_on_linux?
+        "Add one"
+      else
+        # `brew generate-zap` only scans macOS paths.
+        "Generate one with `brew generate-zap #{cask.token}`"
+      end
+      add_error "New casks must have a `zap` stanza for every OS and architecture they support. " \
+                "#{zap_suggestion} or use `zap :not_required` only if there is nothing to zap. " \
+                "See #{Formatter.url("https://docs.brew.sh/Cask-Cookbook#stanza-zap")}"
+    end
+
+    sig { void }
     def audit_description
       # Fonts seldom benefit from descriptions and requiring them disproportionately
       # increases the maintenance burden.
