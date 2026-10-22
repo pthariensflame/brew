@@ -2519,7 +2519,9 @@ class Formula
   sig { params(targets: T.nilable(T.any(Pathname, String))).void }
   def deuniversalize_machos(*targets)
     if targets.none?
-      targets = any_installed_keg&.mach_o_files&.select do |file|
+      # Use `prefix`, not `any_installed_keg`: during an upgrade the latter
+      # is the old opt-linked keg rather than the keg being installed.
+      targets = Keg.new(prefix).mach_o_files.select do |file|
         file.arch == :universal && file.archs.include?(Hardware::CPU.arch)
       end
     end
