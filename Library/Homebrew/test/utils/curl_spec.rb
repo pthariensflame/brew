@@ -595,9 +595,47 @@ RSpec.describe "Utils::Curl" do
     end
   end
 
+  describe "setup_curl_args in utils/curl.sh" do
+    [
+      [nil, nil, nil, nil, %w[-q --retry 3]],
+      ["", "", "", "", %w[-q --retry 3]],
+      ["1", "10", "1", nil, %w[--retry 10 --verbose]],
+      ["/path with spaces/\n--insecure", "0", nil, nil, ["-q", "--config", "/path with spaces/\n--insecure"]],
+      [nil, "-1", nil, nil, %w[-q]],
+      [nil, "invalid", nil, nil, %w[-q]],
+      [nil, "08", nil, nil, %w[-q --retry 08]],
+      *%w[false NO off nil 0].map { |value| [nil, nil, value, value, %w[-q --retry 3]] },
+      ["1", "0", nil, "1", %w[--proto-redir =https]],
+      ["1", "0", nil, "yes", %w[--proto-redir =https]],
+      [nil, nil, "1", "1", %w[-q --retry 3 --verbose --proto-redir =https]],
+    ].each do |curlrc, retries, verbose, no_insecure_redirect, expected|
+      it "handles curlrc=#{curlrc.inspect}, retries=#{retries.inspect}, verbose=#{verbose.inspect}, " \
+         "no_insecure_redirect=#{no_insecure_redirect.inspect}" do
+        T.bind(self, RSpec::Core::ExampleGroup)
+
+        ENV["HOMEBREW_CURLRC"] = curlrc
+        ENV["HOMEBREW_CURL_RETRIES"] = retries
+        ENV["HOMEBREW_CURL_VERBOSE"] = verbose
+        ENV["HOMEBREW_NO_INSECURE_REDIRECT"] = no_insecure_redirect
+
+        expect(SystemCommand.run!("/bin/bash", args: [
+          "-c", 'source "$1"; setup_curl_args; printf "%s\0" "${CURL_DISABLE_CURLRC_ARGS[@]}"',
+          "--", HOMEBREW_LIBRARY_PATH/"utils/curl.sh"
+        ]).stdout.split("\0")).to eq(expected)
+      end
+    end
+  end
+
   describe "::curl_supports_tls13?" do
     it "returns `true` if curl command is successful" do
-      allow(SystemCommand).to receive(:quiet_system).and_return(true)
+      ENV["HOMEBREW_CURLRC"] = "/path with spaces/curlrc"
+      ENV["HOMEBREW_CURL_RETRIES"] = "10"
+      ENV["HOMEBREW_CURL_VERBOSE"] = "1"
+
+      allow(SystemCommand).to receive(:quiet_system)
+        .with(curl_executable, *curl_args("--tlsv1.3", "--head", "https://brew.sh/"))
+        .and_return(true)
+
       expect(curl_supports_tls13?).to be(true)
     end
 

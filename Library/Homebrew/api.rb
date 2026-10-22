@@ -63,7 +63,7 @@ module Homebrew
         odie "Need to download #{url} but cannot as root! Run `brew update` without `sudo` first then try again."
       end
 
-      curl_args = Utils::Curl.curl_args(retries: 0) + [
+      curl_args = [
         "--compressed",
         "--speed-limit", ENV.fetch("HOMEBREW_CURL_SPEED_LIMIT"),
         "--speed-time", ENV.fetch("HOMEBREW_CURL_SPEED_TIME"),

@@ -72,6 +72,20 @@ RSpec.describe Homebrew::API do
       expect(fetched_json).to eq json_hash
     end
 
+    it "loads the configured curlrc once per download", :needs_utils_curl do
+      ENV["HOMEBREW_CURLRC"] = (cache_dir/"curlrc").to_s
+      curl_args = []
+      allow(Utils::Curl).to receive(:system_command) do |_command, args:, **|
+        curl_args.replace(args)
+        File.write(args.fetch(args.index("--output") + 1), json)
+        instance_double(SystemCommand::Result, success?: true, stdout: "200", assert_success!: nil)
+      end
+
+      described_class.fetch_json_api_file("foo.json", target: cache_dir/"foo.json")
+
+      expect(curl_args.count("--config")).to eq(1)
+    end
+
     it "updates an existing JSON file" do
       mock_curl_download stdout: json
       fetched_json, = described_class.fetch_json_api_file("bar.json", target: cache_dir/"bar.json")

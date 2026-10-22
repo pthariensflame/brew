@@ -71,8 +71,8 @@ If the failure is reproducible only with Homebrew, follow the [Troubleshooting c
 
 ### `curl` configuration
 
-A user `curl` configuration can change proxy, certificate, protocol or output behaviour.
-Inspect `~/.curlrc` and any `CURL_*` environment variables instead of deleting the configuration blindly.
+If enabled, a user `curl` configuration can change proxy, certificate, protocol or output behaviour.
+Inspect the configuration selected by [`HOMEBREW_CURLRC`](Manpage.md#environment) and any `CURL_*` environment variables instead of deleting the configuration blindly.
 Temporarily test without custom settings, then correct the specific setting responsible for the failure.
 
 The [curl exit-code reference](https://everything.curl.dev/cmdline/exitcode.html) and [libcurl error reference](https://curl.se/libcurl/c/libcurl-errors.html) explain common transport errors.

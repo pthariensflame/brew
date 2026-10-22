@@ -2992,7 +2992,7 @@ Use this URL as the Homebrew/homebrew\-core \fBgit\fP(1) remote\.
 .RE
 .TP
 \fBHOMEBREW_CURLRC\fP
-If set to an absolute path (i\.e\. beginning with \fB/\fP), pass it with \fB\-\-config\fP when invoking \fBcurl\fP(1)\. If set but \fInot\fP a valid path, do not pass \fB\-\-disable\fP, which disables the use of \fB\&\.curlrc\fP\&\.
+If set to an absolute path (i\.e\. beginning with \fB/\fP), pass it with \fB\-\-config\fP when invoking \fBcurl\fP(1)\. If set but \fInot\fP a valid path, do not pass \fB\-\-disable\fP, which disables the use of \fB\&\.curlrc\fP\&\. Git operations, including repository fetches in \fBbrew update\fP, do not use this file because Git uses its own transport and configuration\.
 .TP
 \fBHOMEBREW_CURL_PATH\fP
 Linux only: Set this value to a new enough \fBcurl\fP executable for Homebrew to use\.

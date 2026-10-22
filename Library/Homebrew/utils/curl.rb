@@ -97,6 +97,7 @@ module Utils
       @curl_path = nil
     end
 
+    # Keep environment options in sync with setup_curl_args in utils/curl.sh.
     sig {
       params(
         extra_args:      String,
@@ -127,13 +128,14 @@ module Utils
     )
       args = []
 
-      # do not load .curlrc unless requested (must be the first argument)
+      # Personal curl defaults can change downloads or the output Homebrew parses.
+      # --disable must be first to ignore them, even when the shim adds certificate options.
       curlrc = Homebrew::EnvConfig.curlrc
       if curlrc&.start_with?("/")
-        # If the file exists, we still want to disable loading the default curlrc.
+        # Load only the explicit config; --config alone also loads the default curlrc.
         args << "--disable" << "--config" << curlrc
       elsif curlrc
-        # This matches legacy behavior: `HOMEBREW_CURLRC` was a bool,
+        # This matches legacy behaviour: `HOMEBREW_CURLRC` was a bool,
         # omitting `--disable` when present.
       else
         args << "--disable"
@@ -202,6 +204,7 @@ module Utils
       HTTPS_REDIRECT_CURL_ARGS
     end
 
+    # Keep redirect policy in sync with setup_curl_args in utils/curl.sh.
     sig { params(args: T::Array[String]).returns(T::Array[String]) }
     def no_insecure_redirect_curl_args(args)
       return args unless Homebrew::EnvConfig.no_insecure_redirect?
@@ -744,7 +747,7 @@ module Utils
     sig { returns(T::Boolean) }
     def curl_supports_tls13?
       @curl_supports_tls13 ||= T.let(Hash.new do |h, key|
-        h[key] = SystemCommand.quiet_system(curl_executable, "--tlsv1.3", "--head", "https://brew.sh/")
+        h[key] = SystemCommand.quiet_system(curl_executable, *curl_args("--tlsv1.3", "--head", "https://brew.sh/"))
       end, T.nilable(T::Hash[T.any(Pathname, String), T::Boolean]))
       @curl_supports_tls13[curl_path]
     end
