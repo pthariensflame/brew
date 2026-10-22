@@ -73,6 +73,18 @@ RSpec.describe Formula do
 
       expect(MachOPathname.wrap(dylib).arch).to eq(:x86_64)
     end
+
+    it "falls back to the installed keg when the formula's keg is not installed" do
+      FileUtils.rm_rf f.prefix
+      old_dylib = f.rack/"1.0/lib/libfoo.dylib"
+      old_dylib.dirname.mkpath
+      FileUtils.cp dylib_path("fat"), old_dylib
+      Keg.new(f.rack/"1.0").optlink
+
+      f.deuniversalize_machos
+
+      expect(MachOPathname.wrap(old_dylib).arch).to eq(:x86_64)
+    end
   end
 
   describe "#uses_from_macos" do
