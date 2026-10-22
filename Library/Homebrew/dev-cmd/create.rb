@@ -11,6 +11,7 @@ require "cask/appcast"
 require "cask/cask_loader"
 require "cask/token_generator"
 require "downloadable"
+require "unpack_strategy"
 
 module Homebrew
   module DevCmd
@@ -125,15 +126,23 @@ module Homebrew
             strategy = DownloadStrategyDetector.detect(url)
             downloader = strategy.new(url, token, version.to_s, cache: Cask::Cache.path)
             downloader.fetch
-            Downloadable.verification_cache.sha256(downloader.cached_location)
+            download = downloader.cached_location
+            Downloadable.verification_cache.sha256(download)
           end
 
           [url.gsub(version.to_s, "\#{version}"), sha256]
         end
 
-        appcast = find_appcast_for(name)
+        app, appcast = find_app_in(download) if download
+        installed_app = Pathname("/Applications")/(app&.basename || "#{name}.app")
+        appcast ||= find_appcast_for(installed_app)
         livecheck_url = appcast ? appcast.url.inspect : "\"\""
         livecheck_strategy = appcast ? appcast.strategy.inspect : "\"\""
+        zap_comment, zap = if (generated_zap = generate_zap_for(installed_app))
+          ["Check that each path belongs to the app.", generated_zap.gsub("\n", "\n  ")]
+        else
+          ["Install and launch the app, then run `brew generate-zap #{token}`.", 'zap trash: ""']
+        end
 
         cask_path.atomic_write <<~RUBY
           # Documentation: https://docs.brew.sh/Cask-Cookbook
@@ -155,10 +164,11 @@ module Homebrew
 
             depends_on macos: ""
 
-            app ""
+            app "#{app}"
 
-            # Documentation: https://docs.brew.sh/Cask-Cookbook#stanza-zap
-            zap trash: ""
+            # #{zap_comment}
+            # Documentation: https://docs.brew.sh/Cask-Cookbook#zap-creation
+            #{zap}
           end
         RUBY
 
@@ -168,16 +178,48 @@ module Homebrew
 
       public
 
-      # Scan an already-installed copy of the app for an appcast to prefill
-      # the `livecheck` block.
-      sig { params(name: String).returns(T.nilable(Cask::Appcast::Result)) }
-      def find_appcast_for(name)
-        app_path = Pathname("/Applications/#{name}.app")
-        return unless app_path.directory?
+      # Scan the app, from the download or an installed copy, for an appcast
+      # to prefill the `livecheck` block.
+      sig { params(app: Pathname).returns(T.nilable(Cask::Appcast::Result)) }
+      def find_appcast_for(app)
+        return unless app.directory?
 
-        appcast = Cask::Appcast.find(app_path)
+        appcast = Cask::Appcast.find(app)
         ohai "Found #{appcast.strategy.inspect} appcast: #{appcast.url}" if appcast
         appcast
+      end
+
+      # Unpack the download to find the app it installs, relative to the
+      # unpacked download, and that app's appcast. This only prefills the
+      # template, so don't guess between the apps in a suite and warn rather
+      # than fail if the download can't be unpacked.
+      sig { params(download: Pathname).returns(T.nilable([Pathname, T.nilable(Cask::Appcast::Result)])) }
+      def find_app_in(download)
+        Dir.mktmpdir("brew-create", HOMEBREW_TEMP) do |dir|
+          unpack_dir = Pathname(dir)
+          UnpackStrategy.detect(download, merge_xattrs: true).extract_nestedly(to: unpack_dir)
+
+          shallowest_apps = unpack_dir.glob("**/*.app").group_by { |app| app.each_filename.count }
+                                      .min_by(&:first)&.last
+          next unless shallowest_apps&.one?
+
+          shallowest_app = shallowest_apps.fetch(0)
+          [shallowest_app.relative_path_from(unpack_dir), find_appcast_for(shallowest_app)]
+        end
+      rescue => e
+        opoo "Unable to unpack the download to find its app."
+        odebug e.message
+        nil
+      end
+
+      # Scan for files left by an already-installed copy of the app to prefill
+      # the `zap` stanza.
+      sig { params(app: Pathname).returns(T.nilable(String)) }
+      def generate_zap_for(app)
+        return unless app.directory?
+
+        Utils.popen_read_text(HOMEBREW_BREW_FILE, "generate-zap", "--name", app.basename(".app").to_s, err: :err)
+             .slice(/^zap (?:trash|delete):.*/m)&.chomp
       end
 
       private

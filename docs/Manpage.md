@@ -3529,7 +3529,8 @@ cask definition, or `zap :not_required` if nothing is found.
 
 `--name`
 
-: Treat the argument as a raw application name instead of a cask token.
+: Treat the argument as a raw application name instead of a cask token. Also
+  matches the app's bundle identifier if it is installed in `/Applications`.
 
 ### `install-bundler-gems` \[`--groups=`\] \[`--add-groups=`\]
 

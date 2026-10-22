@@ -1329,7 +1329,15 @@ Example: [dropbox.rb](https://github.com/Homebrew/homebrew-cask/blob/974a55ade77
 
 #### `zap` creation
 
-The simplest method is to use `brew generate-zap`, which scans the system for associated files and directories to automatically generate the stanza. The target application should have been launched at least once so that preference files and caches exist on disk. In a few instances it may fail to pick up anything and manual creation may be required.
+The simplest method is to use `brew generate-zap`, which scans the system for associated files and directories to automatically generate the stanza:
+
+1. Install the cask with `HOMEBREW_NO_INSTALL_FROM_API=1 brew install --cask <token>`.
+2. Launch the app and use it briefly so that preference files and caches exist on disk, then quit it.
+3. Run `brew generate-zap <token>` and paste its output into the cask.
+
+`brew create --cask` runs `brew generate-zap` for you if the app is already installed in `/Applications`.
+CI also installs and launches the app on macOS, then reports any paths that the `zap` stanza misses.
+In a few instances `brew generate-zap` may fail to pick up anything and manual creation may be required.
 
 Manual creation can be facilitated with:
 

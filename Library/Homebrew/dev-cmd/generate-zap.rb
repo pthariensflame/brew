@@ -29,7 +29,8 @@ module Homebrew
         EOS
 
         switch "--name",
-               description: "Treat the argument as a raw application name instead of a cask token."
+               description: "Treat the argument as a raw application name instead of a cask token. " \
+                            "Also matches the app's bundle identifier if it is installed in `/Applications`."
 
         named_args :cask_or_name, number: 1
       end
@@ -96,7 +97,7 @@ module Homebrew
       sig { override.void }
       def run
         patterns = if args.name?
-          [args.named.fetch(0)]
+          patterns_from_app_paths([Pathname.new("/Applications/#{args.named.fetch(0)}.app")])
         else
           resolve_patterns_from_cask(args.named.to_casks.fetch(0))
         end
