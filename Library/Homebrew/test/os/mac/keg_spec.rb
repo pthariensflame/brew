@@ -96,6 +96,41 @@ RSpec.describe Keg do
 
       keg.codesign_patched_binary(file)
     end
+
+    it "signs a temporary copy when the original path rejects signing on Intel" do
+      Pathname(file).dirname.mkpath
+      File.write(file, "unsigned")
+      allow(Hardware::CPU).to receive(:arm?).and_return(false)
+      allow(SystemCommand).to receive(:quiet_system).and_return(false)
+      allow(keg).to receive(:system_command) do |_, args:, **|
+        if args.first == "--verify"
+          instance_double(SystemCommand::Result, stderr: "#{file}: invalid signature")
+        elsif args.last == file
+          instance_double(SystemCommand::Result, success?: false, stderr: "#{file}: detritus not allowed")
+        else
+          File.write(args.last, "signed")
+          instance_double(SystemCommand::Result, success?: true)
+        end
+      end
+
+      keg.codesign_patched_binary(file)
+
+      expect(File.read(file)).to eq("signed")
+    end
+
+    it "raises when replacing the binary after a successful signing retry fails on Intel" do
+      Pathname(file).dirname.mkpath
+      touch file
+      allow(Hardware::CPU).to receive(:arm?).and_return(false)
+      allow(SystemCommand).to receive(:quiet_system).and_return(false)
+      allow(keg).to receive(:system_command).and_return(
+        instance_double(SystemCommand::Result, stderr: "#{file}: invalid signature"),
+        instance_double(SystemCommand::Result, success?: true),
+      )
+      allow(File).to receive(:rename).with(anything, file).and_raise(Errno::EACCES)
+
+      expect { keg.codesign_patched_binary(file) }.to raise_error(Errno::EACCES)
+    end
   end
 
   describe "#relocate_dynamic_linkage" do

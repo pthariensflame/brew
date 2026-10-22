@@ -120,20 +120,22 @@ module OS
                                                "--preserve-metadata=entitlements,requirements,flags,runtime",
                                                file)
 
-          # If the codesigning fails, it may be a bug in Apple's codesign utility.
-          # A known workaround is to copy the file to another inode, then move it back
-          # erasing the previous file. Then sign again.
+          # If codesigning fails, retry on a new inode at a different path.
+          # Sign before moving it back, as macOS may restore com.apple.provenance
+          # at the original path.
           Dir::Tmpname.create("workaround") do |tmppath|
             FileUtils.cp file, tmppath
-            FileUtils.mv tmppath, file, force: true
-          end
 
-          odebug "Codesigning (2nd try) #{file}"
-          result = system_command("codesign", args: [
-            "--sign", "-", "--force",
-            "--preserve-metadata=entitlements,requirements,flags,runtime",
-            file
-          ], print_stderr: false)
+            odebug "Codesigning (2nd try) #{file}"
+            result = system_command("codesign", args: [
+              "--sign", "-", "--force",
+              "--preserve-metadata=entitlements,requirements,flags,runtime",
+              tmppath
+            ], print_stderr: false)
+            FileUtils.mv tmppath, file if result.success?
+          ensure
+            FileUtils.rm_f tmppath
+          end
           return if result.success?
 
           onoe <<~EOS
