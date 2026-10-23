@@ -23,7 +23,7 @@ class Minitest::TestProf::BaseReporter < ::Minitest::AbstractReporter
   def io; end
   def io=(_arg0); end
   def prerecord(group, example); end
-  def record(*_arg0); end
+  def record(*); end
   def report; end
   def start; end
 
@@ -35,25 +35,12 @@ class Minitest::TestProf::BaseReporter < ::Minitest::AbstractReporter
   def location_without_line_number(group, example = T.unsafe(nil)); end
 end
 
-class Minitest::TestProf::EventProfFormatter
-  def initialize(profilers); end
-
-  def prepare_results; end
-
-  private
-
-  def by_examples(profiler); end
-  def by_groups(profiler); end
-  def time_percentage(time, total_time); end
-  def total_results(profiler); end
-end
-
 class Minitest::TestProf::EventProfReporter < ::Minitest::TestProf::BaseReporter
   def initialize(io = T.unsafe(nil), options = T.unsafe(nil)); end
 
   def before_test(test); end
   def prerecord(group, example); end
-  def record(*_arg0); end
+  def record(*); end
   def report; end
 
   private
@@ -305,11 +292,14 @@ class TestProf::EventProf::Configuration
 
   def event; end
   def event=(_arg0); end
+  def format; end
+  def format=(_arg0); end
   def instrumenter; end
   def instrumenter=(_arg0); end
   def per_example; end
   def per_example=(_arg0); end
   def per_example?; end
+  def printer; end
   def rank_by; end
   def rank_by=(_arg0); end
   def resolve_instrumenter; end
@@ -345,9 +335,9 @@ class TestProf::EventProf::Instrumentations::ActiveSupport::Subscriber
   def initialize(block); end
 
   def block; end
-  def finish(*_arg0); end
-  def publish(_name, started_at, finished_at, *_arg3); end
-  def start(*_arg0); end
+  def finish(*); end
+  def publish(_name, started_at, finished_at, *); end
+  def start(*); end
   def started_at; end
 end
 
@@ -369,6 +359,47 @@ class TestProf::EventProf::Monitor::TopLevelTracker < ::TestProf::EventProf::Mon
 
   def id; end
   def track; end
+end
+
+module TestProf::EventProf::Printers; end
+
+module TestProf::EventProf::Printers::Base
+  include ::TestProf::Logging
+
+  private
+
+  def describe_example(id); end
+  def describe_group(id); end
+  def locate(id); end
+  def time_percentage(time, total_time); end
+end
+
+module TestProf::EventProf::Printers::Json
+  extend ::TestProf::Logging
+  extend ::TestProf::EventProf::Printers::Base
+
+  class << self
+    def dump(profilers); end
+
+    private
+
+    def convert_example(example); end
+    def convert_group(group); end
+    def convert_results(profiler); end
+  end
+end
+
+module TestProf::EventProf::Printers::Simple
+  extend ::TestProf::Logging
+  extend ::TestProf::EventProf::Printers::Base
+
+  class << self
+    def dump(profilers); end
+
+    private
+
+    def dump_profiler(profiler); end
+  end
 end
 
 class TestProf::EventProf::Profiler
@@ -466,7 +497,7 @@ class TestProf::FactoryDoctor::Configuration
 end
 
 module TestProf::FactoryDoctor::FabricationPatch
-  def create(*_arg0); end
+  def create(*); end
 end
 
 module TestProf::FactoryDoctor::FactoryBotPatch
@@ -563,7 +594,7 @@ module TestProf::FactoryProf::Printers::Flamegraph
 
   class << self
     def convert_stacks(result); end
-    def dump(result, **_arg1); end
+    def dump(result, **); end
   end
 end
 
@@ -575,7 +606,7 @@ module TestProf::FactoryProf::Printers::Json
 
   class << self
     def convert_stats(result, start_time); end
-    def dump(result, start_time:, **_arg2); end
+    def dump(result, start_time:, **); end
   end
 end
 
@@ -583,7 +614,7 @@ module TestProf::FactoryProf::Printers::NateHeckler
   extend ::TestProf::Logging
 
   class << self
-    def dump(result, start_time:, **_arg2); end
+    def dump(result, start_time:, **); end
   end
 end
 
@@ -1030,13 +1061,13 @@ class TestProf::TPSProf::Profiler
   def group_finished(group); end
   def group_started(id); end
   def groups; end
-  def max_examples_count(*_arg0, **_arg1, &_arg2); end
-  def max_group_time(*_arg0, **_arg1, &_arg2); end
-  def min_examples_count(*_arg0, **_arg1, &_arg2); end
-  def min_group_time(*_arg0, **_arg1, &_arg2); end
-  def min_target_tps(*_arg0, **_arg1, &_arg2); end
-  def min_tps(*_arg0, **_arg1, &_arg2); end
-  def mode(*_arg0, **_arg1, &_arg2); end
+  def max_examples_count(*, **, &); end
+  def max_group_time(*, **, &); end
+  def min_examples_count(*, **, &); end
+  def min_group_time(*, **, &); end
+  def min_target_tps(*, **, &); end
+  def min_tps(*, **, &); end
+  def mode(*, **, &); end
   def top_count; end
   def total_count; end
   def total_time; end

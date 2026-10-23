@@ -216,7 +216,7 @@ module ELFShim
     def pie?
       return false if @dt_flags_1.nil?
 
-      @dt_flags_1 & ELFTools::Constants::DF::DF_1_PIE != 0
+      @dt_flags_1.anybits?(ELFTools::Constants::DF::DF_1_PIE)
     end
 
     sig { returns(T::Array[String]) }
@@ -243,7 +243,7 @@ module ELFShim
       nodeflib_flag = if @dt_flags_1.nil?
         false
       else
-        @dt_flags_1 & ELFTools::Constants::DF::DF_1_NODEFLIB != 0
+        @dt_flags_1.anybits?(ELFTools::Constants::DF::DF_1_NODEFLIB)
       end
 
       linker_library_paths = OS::Linux::Ld.library_paths
