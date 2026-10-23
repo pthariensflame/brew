@@ -17,8 +17,9 @@ RSpec.describe GitDownloadStrategy do
   end
 
   describe "#clone_args" do
-    it "terminates options before the URL" do
-      expect(strategy.clone_args).to end_with("--end-of-options", url, cached_location.to_s)
+    it "disables submodule recursion and terminates options before the URL" do
+      expect(strategy.clone_args).to start_with("clone", "--no-recurse-submodules")
+        .and end_with("--end-of-options", url, cached_location.to_s)
     end
   end
 
@@ -176,7 +177,7 @@ RSpec.describe GitDownloadStrategy do
     subject(:strategy) do
       Class.new(described_class) do
         T.bind(self, T.class_of(GitDownloadStrategy))
-        public :command!, :local_git_env
+        public :command!, :env, :local_git_env
       end.new(url, name, version)
     end
 
@@ -244,7 +245,7 @@ RSpec.describe GitDownloadStrategy do
       it "passes the GitHub API token to gh during downloads" do
         ENV["HOMEBREW_GITHUB_API_TOKEN"] = "download-test-token"
 
-        expect(strategy.command!("git", args:  ["credential", "fill"],
+        expect(strategy.command!("git", args:  ["credential", "fill"], env: strategy.env(credential_lookup: true),
                                         input: "url=#{url}\n\n").stdout)
           .to include("username=x-access-token\npassword=download-test-token\n")
       end
@@ -253,21 +254,21 @@ RSpec.describe GitDownloadStrategy do
         ENV["HOMEBREW_GITHUB_API_TOKEN"] = "download-test-token"
         stub_const("ORIGINAL_PATHS", [])
 
-        expect(strategy.command!(RbConfig.ruby, args: ["-e", "puts ENV.key?('GH_TOKEN')"]).stdout).to eq("false\n")
+        expect(strategy.env(credential_lookup: true)).not_to have_key("GH_TOKEN")
       end
 
       it "does not pass a token without a matching credential helper" do
         ENV["HOMEBREW_GITHUB_API_TOKEN"] = "download-test-token"
         (home/".gitconfig").write("[credential \"https://example.com\"]\n  helper = !gh auth git-credential\n")
 
-        expect(strategy.command!(RbConfig.ruby, args: ["-e", "puts ENV.key?('GH_TOKEN')"]).stdout).to eq("false\n")
+        expect(strategy.env(credential_lookup: true)).not_to have_key("GH_TOKEN")
       end
 
       it "does not pass a token after the credential helpers are reset" do
         ENV["HOMEBREW_GITHUB_API_TOKEN"] = "download-test-token"
         (home/".gitconfig").open("a") { |file| file.puts "  helper =" }
 
-        expect(strategy.command!(RbConfig.ruby, args: ["-e", "puts ENV.key?('GH_TOKEN')"]).stdout).to eq("false\n")
+        expect(strategy.env(credential_lookup: true)).not_to have_key("GH_TOKEN")
       end
 
       it "finds gh on the original PATH through a wrapper helper after URL rewriting" do
@@ -284,7 +285,8 @@ RSpec.describe GitDownloadStrategy do
         allow(Sandbox).to receive(:isolate_operation?).and_return(false)
         allow(strategy).to receive_messages(url: "https://example.com/homebrew/foo", command_sandbox: nil)
 
-        expect(strategy.command!("git", args: ["credential", "fill"], input: "url=#{url}\n\n").stdout)
+        expect(strategy.command!("git", args: ["credential", "fill"], input: "url=#{url}\n\n",
+                                       env: strategy.env(credential_lookup: true)).stdout)
           .to include("username=x-access-token\npassword=download-test-token\n")
       end
 
@@ -298,8 +300,217 @@ RSpec.describe GitDownloadStrategy do
         ENV["HOMEBREW_GITHUB_API_TOKEN"] = "api-test-token"
         ENV["HOMEBREW_UNRELATED_TOKEN"] = "unrelated-test-token"
 
-        expect(strategy.command!(RbConfig.ruby, args: ["-e", "puts ENV.keys.grep(/TOKEN/).sort"]).stdout)
+        expect(strategy.command!(RbConfig.ruby, args: ["-e", "puts ENV.keys.grep(/TOKEN/).sort"],
+                                                env:  strategy.env(credential_lookup: true)).stdout)
           .to eq("GH_TOKEN\n")
+      end
+    end
+  end
+
+  describe "Keychain credential handoff" do
+    let(:resolved_url) { url }
+    let(:helper) { "!gh auth git-credential\n" }
+    let(:git_result) { instance_double(SystemCommand::Result, success?: true, stdout: "") }
+
+    before do
+      allow(Sandbox).to receive(:isolate_operation?).and_return(true)
+      ENV.delete("HOMEBREW_GITHUB_API_TOKEN")
+      ENV.delete("GH_TOKEN")
+      allow(Utils::Git).to receive(:ensure_installed!)
+      allow(strategy).to receive_messages(repo_valid?: false, submodules?: false)
+      allow(strategy).to receive(:which).with("gh", ORIGINAL_PATHS).and_return(Pathname("/trusted/bin/gh"))
+      allow(strategy).to receive_messages(system_command!: git_result, system_command: git_result)
+      allow(strategy).to receive(:system_command)
+        .with("git", hash_including(args: ["ls-remote", "--get-url", "--", url]))
+        .and_return(instance_double(SystemCommand::Result, success?: true, stdout: "#{resolved_url}\n"))
+      allow(strategy).to receive(:system_command)
+        .with("git", hash_including(args: ["config", "--get-urlmatch", "credential.helper", resolved_url]))
+        .and_return(instance_double(SystemCommand::Result, success?: true, stdout: helper))
+      allow(GitHub::API).to receive(:github_cli_token).and_return("keychain-test-token")
+      strategy.quiet!
+    end
+
+    it "passes the selected credential to the clone and registers it for redaction" do
+      expect(strategy).to receive(:system_command!).with(
+        "git", hash_including(args: strategy.clone_args, env: hash_including("GH_TOKEN" => "keychain-test-token"),
+                              secrets: ["keychain-test-token"])
+      ).and_return(git_result)
+
+      strategy.fetch
+    end
+
+    it "keeps the credential out of formula evaluation while launching Git" do
+      visible_tokens = []
+      allow(strategy).to receive(:system_command!)
+        .with("git", hash_including(args: strategy.clone_args)) do
+          visible_tokens << Formulary.load_formula(
+            "download-token", mktmpdir/"download-token.rb",
+            <<~RUBY,
+              class DownloadToken < Formula
+                desc ENV.values_at("HOMEBREW_GITHUB_API_TOKEN", "GH_TOKEN").compact.join
+                url "https://example.com/download-token-1.0.tar.gz"
+              end
+            RUBY
+            "DownloadTokenNamespace", flags: [], ignore_errors: false
+          ).desc
+          git_result
+        end
+
+      strategy.fetch
+
+      expect(visible_tokens).to eq([""])
+    end
+
+    test_each([nil, "explicit-test-token"].product(%w[checkout reset config submodule])) do |(token, command)|
+      it "does not pass #{token ? "an explicit" : "an automatic"} token to #{command} commands" do
+        ENV["HOMEBREW_GITHUB_API_TOKEN"] = token
+        allow(strategy).to receive_messages(repo_valid?: true, partial_clone_sparse_checkout?: true,
+                                            submodules?: true)
+        expect(strategy).not_to receive(:system_command!)
+          .with("git", hash_including(args: array_including(command), env: hash_including("GH_TOKEN")))
+
+        strategy.fetch
+      end
+    end
+
+    test_each([false, true]) do |shallow|
+      it "passes the credential when updating a #{shallow ? "shallow" : "full"} cached repository" do
+        allow(strategy).to receive_messages(repo_valid?: true, shallow_dir?: shallow)
+        expect(strategy).to receive(:system_command!).with(
+          "git", hash_including(args: ["fetch", "--no-recurse-submodules", "origin", *("--unshallow" if shallow)],
+                                env:  hash_including("GH_TOKEN" => "keychain-test-token"))
+        ).and_return(git_result)
+
+        strategy.fetch
+      end
+    end
+
+    it "retrieves the credential only for the top-level clone when submodules are present" do
+      allow(strategy).to receive(:submodules?).and_return(true)
+      expect(GitHub::API).to receive(:github_cli_token).once.and_return("keychain-test-token")
+
+      strategy.fetch
+    end
+
+    it "does not retrieve credentials for local revision inspections" do
+      expect(GitHub::API).not_to receive(:github_cli_token)
+
+      strategy.last_commit
+    end
+
+    it "uses the selected gh executable with a bounded lookup" do
+      expect(GitHub::API).to receive(:github_cli_token)
+        .with(executable: Pathname("/trusted/bin/gh"), timeout: 10).once.and_return("keychain-test-token")
+
+      strategy.fetch
+    end
+
+    it "preserves an explicitly supplied token" do
+      ENV["HOMEBREW_GITHUB_API_TOKEN"] = "explicit-test-token"
+      expect(GitHub::API).not_to receive(:github_cli_token)
+
+      strategy.fetch
+    end
+
+    it "does not retrieve credentials when gh is unavailable" do
+      allow(strategy).to receive(:which).with("gh", ORIGINAL_PATHS).and_return(nil)
+      expect(GitHub::API).not_to receive(:github_cli_token)
+
+      strategy.fetch
+    end
+
+    it "does not retrieve credentials when the download is not sandboxed" do
+      allow(Sandbox).to receive(:isolate_operation?).and_return(false)
+      expect(GitHub::API).not_to receive(:github_cli_token)
+
+      strategy.fetch
+    end
+
+    it "continues with the configured helper when credential retrieval times out" do
+      allow(GitHub::API).to receive(:github_cli_token).and_raise(Timeout::Error)
+      expect(strategy).to receive(:system_command!)
+        .with("git", hash_including(args: strategy.clone_args, env: hash_excluding("GH_TOKEN")))
+        .and_return(git_result)
+
+      strategy.fetch
+    end
+
+    it "continues with the configured helper when no credential is available" do
+      allow(GitHub::API).to receive(:github_cli_token).and_return(nil)
+      expect(strategy).to receive(:system_command!)
+        .with("git", hash_including(args: strategy.clone_args, env: hash_excluding("GH_TOKEN")))
+        .and_return(git_result)
+
+      strategy.fetch
+    end
+
+    context "with a GitHub-specific strategy" do
+      subject(:strategy) { GitHubGitDownloadStrategy.new(url, name, version) }
+
+      it "passes the credential to its clone" do
+        expect(strategy).to receive(:system_command!)
+          .with("git", hash_including(args: strategy.clone_args,
+                                      env:  hash_including("GH_TOKEN" => "keychain-test-token")))
+          .and_return(git_result)
+
+        strategy.fetch
+      end
+    end
+
+    context "with a custom strategy" do
+      subject(:strategy) { Class.new(described_class).new(url, name, version) }
+
+      it "does not retrieve credentials" do
+        expect(GitHub::API).not_to receive(:github_cli_token)
+
+        strategy.fetch
+      end
+    end
+
+    context "with a URL rewritten to GitHub" do
+      let(:url) { "https://example.com/homebrew/foo" }
+      let(:resolved_url) { "https://github.com/homebrew/foo" }
+
+      it "uses the effective URL to select credentials" do
+        expect(GitHub::API).to receive(:github_cli_token).and_return("keychain-test-token")
+
+        strategy.fetch
+      end
+    end
+
+    context "with a wrapper helper" do
+      let(:helper) { "!/custom/wrapper\n" }
+
+      it "uses the existing token lookup without parsing the helper command" do
+        expect(GitHub::API).to receive(:github_cli_token).and_return("keychain-test-token")
+
+        strategy.fetch
+      end
+    end
+
+    test_each(%w[https://example.com/homebrew/foo https://github.com.example.com/homebrew/foo
+                 https://github.com@example.com/homebrew/foo https://github.com:8443/homebrew/foo
+                 http://github.com/homebrew/foo git@github.com:homebrew/foo.git file:///repo.git]) do |remote_url|
+      context "when the URL resolves to #{remote_url}" do
+        let(:resolved_url) { remote_url }
+
+        it "does not retrieve GitHub credentials" do
+          expect(GitHub::API).not_to receive(:github_cli_token)
+
+          strategy.fetch
+        end
+      end
+    end
+
+    test_each(["", "!gh auth git-credential\n\n"]) do |configured_helper|
+      context "with helper #{configured_helper.inspect}" do
+        let(:helper) { configured_helper }
+
+        it "does not retrieve credentials without an enabled helper" do
+          expect(GitHub::API).not_to receive(:github_cli_token)
+
+          strategy.fetch
+        end
       end
     end
   end
@@ -406,6 +617,25 @@ RSpec.describe GitDownloadStrategy do
       end
 
       expect(strategy.fetch_last_commit).to eq("f68266e")
+    end
+
+    it "does not fetch submodules even when repository configuration enables recursion" do
+      ENV["GIT_ALLOW_PROTOCOL"] = "file"
+      remote_repo.cd do
+        setup_git_repo
+        SystemCommand.run!("git", args: ["submodule", "add", remote_repo, "child"])
+        git_commit_all
+      end
+      revision = strategy.fetch_last_commit
+      SystemCommand.run!("git", args: ["-C", cached_location, "config", "submodule.recurse", "true"])
+      SystemCommand.run!("git", args: ["-C", cached_location, "config", "fetch.recurseSubmodules", "true"])
+      SystemCommand.run!("git",
+                         args: ["-C", cached_location, "config", "submodule.child.fetchRecurseSubmodules", "true"])
+      SystemCommand.run!("git",
+                         args: ["-C", cached_location/"child", "remote", "set-url", "origin", "/missing-submodule"])
+      allow(strategy).to receive(:submodules?).and_return(false)
+
+      expect(strategy.fetch_last_commit).to eq(revision)
     end
   end
 end

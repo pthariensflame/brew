@@ -83,13 +83,26 @@ Which is usually: `~/Library/Caches/Homebrew`
 
 Prefer HTTPS source URLs and the `gh` credential helper for GitHub.
 [GitHub recommends `gh` for HTTPS authentication](https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git).
-Homebrew uses your configured Git helpers and passes `HOMEBREW_GITHUB_API_TOKEN` as `GH_TOKEN` during downloads only when `gh` is on your original `PATH` and a helper is configured for the download URL:
+For sandboxed HTTPS downloads from `github.com` using the `gh` helper, Homebrew retrieves your GitHub CLI token before starting Git.
+It passes the token as `GH_TOKEN` only to top-level clones, fetches and remote branch discovery in Homebrew's built-in Git download strategies.
+Clone and fetch operations disable submodule recursion, even when Git configuration enables it.
+Submodule updates, checkouts and resets do not receive the token.
+Private submodules and partial clones that need to fetch missing objects during checkout therefore still require a credential helper that works inside the sandbox.
+The retrieved token is not added to Homebrew's environment or exposed through environment variables during formula evaluation, local Git inspections, builds or tests.
+The download sandbox still blocks direct Keychain access.
+
+Token handoff requires `gh` on your original `PATH` and a helper configured for the download URL, which may be a wrapper that invokes `gh`.
+Homebrew uses its existing GitHub CLI token lookup outside the sandbox; configured helpers run inside it.
+To override the selected token for the same operations, set `HOMEBREW_GITHUB_API_TOKEN` explicitly:
 
 ```sh
 HOMEBREW_GITHUB_API_TOKEN="$HOMEBREW_MY_TOKEN" brew fetch user/tap/formula
 ```
 
 Restrict the token to the required repositories: download subprocesses receive it, but local Git inspections, builds and tests do not.
+An explicitly supplied `HOMEBREW_GITHUB_API_TOKEN` remains readable during formula evaluation for compatibility with existing formulae; automatic retrieval does not set it.
+Automatic retrieval is not used for custom download strategies or other hosts.
+
 Homebrew also supports SSH through an agent. Before downloading, check that the required key is listed, or load it:
 
 ```sh
@@ -101,7 +114,8 @@ The following do not work for sandboxed Git downloads:
 
 * Configuration includes, credential helpers or supporting files in sandbox-restricted locations: run `brew doctor` to identify errors loading configuration and any matching restricted paths.
   Move required files to accessible locations and update the configuration; Homebrew does not grant extra access to configured paths.
-* Helpers that read the macOS login keychain: the sandbox blocks keychain access to protect unrelated credentials.
+* Helpers that read the macOS login keychain directly: the sandbox blocks keychain access to protect unrelated credentials.
+  The built-in `gh` token handoff described above avoids giving the helper Keychain access inside the sandbox.
 * Bare `GH_TOKEN` or arbitrary token variables: Homebrew filters the environment to limit credential exposure; select the token through `HOMEBREW_GITHUB_API_TOKEN` instead.
 * Interactive password or key-passphrase prompts: Homebrew disables them to prevent unattended downloads from hanging.
 
@@ -110,6 +124,18 @@ It reports unsuccessful queries and sandbox setup failures.
 It does not run credential helpers or make remote requests.
 The check is skipped inside another sandbox and runs outside repositories.
 It cannot verify authentication, credential helpers, repository-dependent includes or files Git does not read during the check.
+
+## Why does a private `brew tap` work when `brew install` cannot authenticate?
+
+`brew tap` and `brew update` manage tap repositories outside the package download sandbox.
+They can use your existing Git credential helpers, including helpers that read the macOS Keychain.
+The source download restrictions do not require you to supply a separate token for tapping or updating private taps.
+
+`brew install` and `brew fetch` download sources selected by formulae, which may include other repositories and submodules.
+These Git downloads run in the package download sandbox, even when the source repository is also the tap repository.
+Homebrew's sandbox cannot restrict Keychain access to a single credential, so it blocks access to protect unrelated credentials.
+Use the [token handoff or SSH agent described above](#how-do-i-authenticate-private-git-source-downloads) for private source downloads.
+`brew trust` authorises loading package definitions; it does not remove their sandbox restrictions.
 
 ## My macOS `.app`s don’t find Homebrew utilities
 

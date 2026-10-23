@@ -59,9 +59,7 @@ class GitHubGitDownloadStrategy < GitDownloadStrategy
   def default_branch
     return @default_branch if defined?(@default_branch)
 
-    command! "git",
-             args:  ["remote", "set-head", "origin", "--auto"],
-             chdir: cached_location
+    git_download_command! args: ["remote", "set-head", "origin", "--auto"]
 
     result = command! "git",
                       args:  ["symbolic-ref", "refs/remotes/origin/HEAD"],
