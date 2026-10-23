@@ -4,6 +4,24 @@
 require_relative "shared_examples"
 
 RSpec.describe UnpackStrategy::Dmg, :needs_macos do
+  describe UnpackStrategy::Dmg::Bom do
+    it "ignores Desktop DB at the volume root" do
+      expect(described_class.dmg_metadata?(Pathname("./Desktop DB"))).to be true
+    end
+
+    it "ignores Desktop DF at the volume root" do
+      expect(described_class.dmg_metadata?(Pathname("./Desktop DF"))).to be true
+    end
+
+    it "preserves Desktop DB inside an application" do
+      expect(described_class.dmg_metadata?(Pathname("Example.app/Contents/Resources/Desktop DB"))).to be false
+    end
+
+    it "preserves Desktop DF inside an application" do
+      expect(described_class.dmg_metadata?(Pathname("Example.app/Contents/Resources/Desktop DF"))).to be false
+    end
+  end
+
   describe "#mount" do
     subject(:path) { TEST_FIXTURE_DIR/"cask/container.dmg" }
 
