@@ -27,6 +27,18 @@ RSpec.describe Homebrew::DevCmd::GenerateFormulaApi do
 
   it_behaves_like "parseable arguments"
 
+  it "regenerates formula data on every run" do
+    allow(Homebrew::Vulns::AdvisoryDatabase).to receive(:load).and_return(nil)
+    allow(Formulary.factory("foo")).to receive(:to_hash_with_variations)
+      .and_return({ "name" => "foo", "desc" => "First" }, { "name" => "foo", "desc" => "Updated" })
+
+    mktmpdir.cd do
+      2.times { described_class.new([]).run }
+
+      expect(JSON.parse(Pathname("_data/formula/foo.json").read).fetch("desc")).to eq("Updated")
+    end
+  end
+
   it "writes formula executables to generated formula data" do
     allow(Homebrew::Vulns::AdvisoryDatabase).to receive(:load).and_return(nil)
 

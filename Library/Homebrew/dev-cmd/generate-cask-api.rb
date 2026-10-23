@@ -54,13 +54,17 @@ module Homebrew
               cask = Cask::CaskLoader.load(path)
               name = cask.token
               all_casks[name] = cask.to_hash_with_variations
-              json = JSON.pretty_generate(all_casks[name])
-              html_template_name = html_template(name)
 
               unless args.dry_run?
-                File.write("_data/cask/#{name.tr("+", "_")}.json", "#{json}\n")
+                File.write("_data/cask/#{name.tr("+", "_")}.json", "#{JSON.pretty_generate(all_casks[name])}\n")
                 File.write("api/cask/#{name}.json", CASK_JSON_TEMPLATE)
-                File.write("cask/#{name}.html", html_template_name)
+                File.write("cask/#{name}.html", <<~EOS)
+                  ---
+                  title: '#{name}'
+                  layout: cask
+                  ---
+                  {{ content }}
+                EOS
               end
             rescue
               onoe "Error while generating data for cask '#{path.stem}'."
@@ -88,19 +92,6 @@ module Homebrew
             File.write("api/internal/cask.#{bottle_tag}.json", JSON.generate(json_contents)) unless args.dry_run?
           end
         end
-      end
-
-      private
-
-      sig { params(title: String).returns(String) }
-      def html_template(title)
-        <<~EOS
-          ---
-          title: '#{title}'
-          layout: cask
-          ---
-          {{ content }}
-        EOS
       end
     end
   end

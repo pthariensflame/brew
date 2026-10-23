@@ -25,6 +25,22 @@ module Utils
     class << self
       include Context
 
+      sig { params(category: String, name: String, data: T.anything, data_source: T.nilable(String)).void }
+      def write_api(category, name, data, data_source: nil)
+        suffix = File.join(category, data_source || "")
+        Pathname("_data/analytics/#{suffix}").mkpath
+        Pathname("api/analytics/#{suffix}").mkpath
+        Pathname("_data/analytics/#{suffix}/#{name}.json").write(JSON.pretty_generate(data))
+        Pathname("api/analytics/#{suffix}/#{name}.json").write(<<~EOS)
+          ---
+          layout: analytics_json
+          category: #{category}
+          #{"#{data_source}: true" if data_source}
+          ---
+          {{ content }}
+        EOS
+      end
+
       sig {
         params(measurement: Symbol,
                tags:        T::Hash[Symbol, T.any(T::Boolean, String)],

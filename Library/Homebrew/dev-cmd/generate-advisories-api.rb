@@ -4,6 +4,7 @@
 require "abstract_command"
 require "fileutils"
 require "json"
+require "utils/analytics/vulnerabilities"
 
 module Homebrew
   module DevCmd
@@ -26,6 +27,7 @@ module Homebrew
         result = build(repository/"advisories")
         FileUtils.mkdir_p "api"
         File.write("api/advisories.json", "#{JSON.generate(result)}\n")
+        Utils::Analytics.write_api("security", "corpus", Utils::Analytics::Vulnerabilities.corpus(repository))
       end
 
       private

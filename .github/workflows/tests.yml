@@ -639,6 +639,12 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          working-directory: ${{ steps.set-up-homebrew.outputs.repository-path }}/Library/Homebrew/formula-analytics
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            .python-version
 
       - run: brew formula-analytics --setup
 
@@ -647,7 +653,7 @@ jobs:
         env:
           HOMEBREW_INFLUXDB_TOKEN: ${{ secrets.HOMEBREW_INFLUXDB_READ_TOKEN }}
 
-      - run: brew generate-analytics-api
+      - run: brew generate-analytics-api --influx
         if: github.event.pull_request.head.repo.fork == false && (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]')
         env:
           HOMEBREW_INFLUXDB_TOKEN: ${{ secrets.HOMEBREW_INFLUXDB_READ_TOKEN }}

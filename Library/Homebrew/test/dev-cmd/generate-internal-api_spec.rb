@@ -7,7 +7,7 @@ require "dev-cmd/generate-internal-api"
 RSpec.describe Homebrew::DevCmd::GenerateInternalApi do
   it_behaves_like "parseable arguments"
 
-  it "writes metadata and formula executables to each generated packages file" do
+  it "regenerates metadata and package data on every run" do
     core_tap = instance_double(CoreTap, installed?: true, name: "homebrew/core", formula_names: ["foo"],
                                         alias_table: {}, formula_renames: {}, git_head: "formula-head",
                                         tap_migrations: {})
@@ -44,9 +44,19 @@ RSpec.describe Homebrew::DevCmd::GenerateInternalApi do
     allow(Time).to receive(:now).and_return(Time.at(1_714_056_000))
     stub_const("HOMEBREW_VERSION", "4.2.18")
     stub_const("OnSystem::VALID_OS_ARCH_TAGS", [bottle_tag])
+    allow(Formulary.factory("foo")).to receive(:to_hash_with_variations)
+      .and_return({ "name" => "old" }, { "name" => "foo" })
+    allow(Cask::CaskLoader.load(Pathname("c.rb"))).to receive(:to_hash_with_variations)
+      .and_return({ "token" => "old" }, { "token" => "c" })
+    allow(Homebrew::API::Formula::FormulaStructGenerator).to receive(:generate_formula_struct_hash)
+      .with({ "name" => "old", "executables" => ["foo-tool", "food"] }, bottle_tag:)
+      .and_return(instance_double(Homebrew::API::FormulaStruct, serialize: { "name" => "old" }))
+    allow(Homebrew::API::Cask::CaskStructGenerator).to receive(:generate_cask_struct_hash)
+      .with({ "token" => "old" }, bottle_tag:)
+      .and_return(instance_double(Homebrew::API::CaskStruct, serialize: { "token" => "old" }))
 
     mktmpdir do |path|
-      path.cd { described_class.new([]).run }
+      path.cd { 2.times { described_class.new([]).run } }
 
       json = JSON.parse((path/"api/internal/packages.arm64_sonoma.json").read)
       expect(json["metadata"]).to eq({
@@ -55,6 +65,7 @@ RSpec.describe Homebrew::DevCmd::GenerateInternalApi do
         "generated_at"     => 1_714_056_000,
       })
       expect(json.dig("formulae", "foo", "executables")).to eq(["foo-tool", "food"])
+      expect(json.dig("casks", "c", "token")).to eq("c")
     end
   end
 end

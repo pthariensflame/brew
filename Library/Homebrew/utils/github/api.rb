@@ -288,11 +288,12 @@ module GitHub
         request_method:   T.nilable(Symbol),
         scopes:           T::Array[String],
         parse_json:       T::Boolean,
+        return_headers:   T::Boolean,
         _block:           T.nilable(T.proc.params(data: T::Hash[String, T.untyped]).returns(T.untyped)),
       ).returns(T.untyped)
     }
     def self.open_rest(url, data: nil, data_binary_path: nil, request_method: nil,
-                       scopes: [].freeze, parse_json: true, &_block)
+                       scopes: [].freeze, parse_json: true, return_headers: false, &_block)
       # This is a no-op if the user is opting out of using the GitHub API.
       return block_given? ? yield({}) : {} if Homebrew::EnvConfig.no_github_api?
 
@@ -355,7 +356,9 @@ module GitHub
         return if http_code == "204" # No Content
 
         output = JSON.parse output if parse_json
-        if block_given?
+        if return_headers
+          [output, headers]
+        elsif block_given?
           yield output
         else
           output
