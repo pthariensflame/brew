@@ -184,6 +184,15 @@ module Homebrew
         resolution = Concurrent::Event.new
         fetchable_downloads.each_value { |future| future.on_resolution! { resolution.set } }
 
+        # `WINCH` is `SIGWINCH` (window change), which Ruby names without the
+        # `SIG` prefix. The kernel sends it to the foreground process group
+        # when the terminal is resized. Without this handler `Tty.width` keeps
+        # the width brew started with, so progress lines wrap after the
+        # terminal narrows and the redraw, which moves the cursor up by lines
+        # rather than rows, starts lower each time. `Tty.size_stale!` only
+        # marks the cached size as stale so it is safe to call from a handler.
+        trap(:WINCH) { Tty.size_stale! }
+        frame_width = Tty.width if tty_with_cursor_move_support?
         begin
           stdout_print_and_flush_if_tty Tty.hide_cursor
 
@@ -245,6 +254,11 @@ module Homebrew
           until remaining_downloads.empty?
             begin
               stdout_print_and_flush_if_tty Tty.begin_synchronized_update
+              # Terminals rewrap the frame already on screen when their width
+              # changes, so clear any rows the next frame won't overwrite.
+              if frame_width && (width = Tty.width) && width != frame_width && (frame_width = width)
+                stdout_print_and_flush Tty.clear_to_end_of_screen
+              end
 
               finished_states = [:fulfilled, :rejected]
 
