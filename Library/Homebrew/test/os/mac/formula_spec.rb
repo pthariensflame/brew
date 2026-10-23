@@ -41,6 +41,52 @@ RSpec.describe Formula do
     end
   end
 
+  describe "#deuniversalize_machos" do
+    subject(:f) do
+      formula "deuniversalize-test" do
+        T.bind(self, T.class_of(Formula))
+        url "foo-2.0"
+        version "2.0"
+      end
+    end
+
+    let(:dylib) { f.lib/"libfoo.dylib" }
+
+    before do
+      allow(Hardware::CPU).to receive_messages(arch: :x86_64, arm?: false)
+      dylib.dirname.mkpath
+      FileUtils.cp dylib_path("fat"), dylib
+    end
+
+    after do
+      FileUtils.rm_f f.opt_prefix
+      FileUtils.rm_rf f.rack
+    end
+
+    it "thins the keg being installed when an older keg is opt-linked" do
+      old_keg = f.rack/"1.0"
+      (old_keg/"lib").mkpath
+      FileUtils.cp dylib_path("x86_64"), old_keg/"lib/libfoo.dylib"
+      Keg.new(old_keg).optlink
+
+      f.deuniversalize_machos
+
+      expect(MachOPathname.wrap(dylib).arch).to eq(:x86_64)
+    end
+
+    it "falls back to the installed keg when the formula's keg is not installed" do
+      FileUtils.rm_rf f.prefix
+      old_dylib = f.rack/"1.0/lib/libfoo.dylib"
+      old_dylib.dirname.mkpath
+      FileUtils.cp dylib_path("fat"), old_dylib
+      Keg.new(f.rack/"1.0").optlink
+
+      f.deuniversalize_machos
+
+      expect(MachOPathname.wrap(old_dylib).arch).to eq(:x86_64)
+    end
+  end
+
   describe "#uses_from_macos" do
     before do
       allow(OS).to receive(:mac?).and_return(true)
