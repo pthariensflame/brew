@@ -119,6 +119,11 @@ module Tty
     end
 
     sig { returns(String) }
+    def clear_to_end_of_screen
+      "\033[J"
+    end
+
+    sig { returns(String) }
     def hide_cursor
       "\033[?25l"
     end
@@ -140,17 +145,24 @@ module Tty
 
     sig { returns(T.nilable([Integer, Integer])) }
     def size
-      return @size if defined?(@size)
-
-      @size = T.let(($stdin.winsize if $stdin.tty?), T.nilable([Integer, Integer]))
+      clear_stale_size!
+      @size ||= T.let(($stdin.winsize if $stdin.tty?), T.nilable([Integer, Integer]))
     rescue IOError, SystemCallError
-      @size = nil
+      nil
+    end
+
+    # Mark the cached terminal size as stale so it is re-read on next use,
+    # e.g. after a resize. Only set a flag as a `SIGWINCH` handler may call
+    # this while `size`, `height` or `width` are caching an old value.
+    sig { void }
+    def size_stale!
+      @size_stale = T.let(true, T.nilable(T::Boolean))
     end
 
     sig { returns(Integer) }
     def height
-      @height ||= T.let(
-        size&.first || Utils.popen_read_text("/usr/bin/tput", "lines", err: File::NULL).presence&.to_i || 40,
+      size&.first || @height ||= T.let(
+        Utils.popen_read_text("/usr/bin/tput", "lines", err: File::NULL).presence&.to_i || 40,
         T.nilable(Integer),
       )
     end
@@ -158,8 +170,8 @@ module Tty
     # Keep in sync with `columns` in Library/Homebrew/utils/tty.sh.
     sig { returns(Integer) }
     def width
-      @width ||= T.let(
-        size&.second || Utils.popen_read_text("/usr/bin/tput", "cols", err: File::NULL).presence&.to_i || 80,
+      size&.second || @width ||= T.let(
+        Utils.popen_read_text("/usr/bin/tput", "cols", err: File::NULL).presence&.to_i || 80,
         T.nilable(Integer),
       )
     end
@@ -218,6 +230,18 @@ module Tty
       return false if @stream.blank?
 
       @stream.tty?
+    end
+
+    private
+
+    sig { void }
+    def clear_stale_size!
+      return unless @size_stale
+
+      @size_stale = false
+      @size = nil
+      @height = nil
+      @width = nil
     end
   end
 end

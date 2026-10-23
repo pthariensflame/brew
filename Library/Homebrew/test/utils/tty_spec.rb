@@ -66,14 +66,20 @@ RSpec.describe Tty do
     end
   end
 
+  describe "::clear_to_end_of_screen" do
+    it "returns the erase below sequence" do
+      expect(described_class.clear_to_end_of_screen).to eq("\033[J")
+    end
+  end
+
   describe "::size" do
     before do
-      described_class.remove_instance_variable(:@size) if described_class.instance_variable_defined?(:@size)
+      described_class.size_stale!
       allow(Utils).to receive(:popen_read_text).and_raise("unexpected subprocess")
     end
 
     after do
-      described_class.remove_instance_variable(:@size) if described_class.instance_variable_defined?(:@size)
+      described_class.size_stale!
     end
 
     it "reads and memoises the terminal size without a subprocess" do
@@ -84,6 +90,18 @@ RSpec.describe Tty do
         controller.winsize = [50, 180]
 
         expect([size, described_class.size]).to eq([[40, 160], [40, 160]])
+      end
+    end
+
+    it "reads the new terminal size after the cached size is reset" do
+      PTY.open do |controller, terminal|
+        controller.winsize = [40, 160]
+        $stdin.reopen(terminal)
+        size = [described_class.height, described_class.width]
+        controller.winsize = [50, 180]
+        described_class.size_stale!
+
+        expect([size, [described_class.height, described_class.width]]).to eq([[40, 160], [50, 180]])
       end
     end
 
@@ -103,12 +121,26 @@ RSpec.describe Tty do
       $stdin = original_stdin
     end
 
-    it "memoises a failed terminal size probe" do
+    it "retries a failed terminal size probe" do
       allow($stdin).to receive(:tty?).and_return(true)
       allow($stdin).to receive(:winsize).and_invoke(proc { raise Errno::ENOTTY }, proc { [40, 160] })
 
-      # We call this twice to check the failure is memoised
-      expect([described_class.size, described_class.size]).to eq([nil, nil])
+      expect([described_class.size, described_class.size]).to eq([nil, [40, 160]])
+    end
+
+    it "re-reads the terminal size when reset while reading it" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      # Reset during the probe, as a `SIGWINCH` handler can.
+      allow($stdin).to receive(:winsize).and_invoke(
+        proc {
+          described_class.size_stale!
+          [40, 160]
+        },
+        proc { [50, 180] },
+      )
+      described_class.size
+
+      expect(described_class.size).to eq([50, 180])
     end
 
     it "does not expose an unfinished size to another thread" do

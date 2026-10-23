@@ -267,6 +267,63 @@ RSpec.describe Homebrew::DownloadQueue do
     ).to_stdout
   end
 
+  it "does not clear below the frame while the terminal width is unchanged" do
+    allow($stdout).to receive(:tty?).and_return(true)
+    ENV["TERM"] = "xterm-256color"
+    allow(downloadable).to receive(:fetched_size).and_return(nil)
+    allow(retryable_download).to receive(:fetch).and_return(cached_download)
+
+    download_queue.enqueue(downloadable)
+
+    expect { download_queue.fetch }.not_to output(include("\e[J")).to_stdout
+  end
+
+  context "when the terminal is resized while rendering progress" do
+    before { Tty.size_stale! }
+    after { Tty.size_stale! }
+
+    it "re-reads the terminal width" do
+      allow($stdout).to receive(:tty?).and_return(true)
+      ENV["TERM"] = "xterm-256color"
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow($stdin).to receive(:winsize).and_return([24, 80], [24, 40])
+      # Resize while rendering progress rather than in the download thread,
+      # which starts as soon as the download is enqueued.
+      allow(downloadable).to receive(:fetched_size) do
+        Process.kill(:WINCH, Process.pid)
+        nil
+      end
+      allow(retryable_download).to receive(:fetch).and_return(cached_download)
+      allow(download_queue).to receive(:stdout_print_and_flush)
+
+      download_queue.enqueue(downloadable)
+
+      expect { download_queue.fetch }.to change(Tty, :width).from(80).to(40)
+    end
+
+    it "clears below the frame on the next redraw" do
+      allow($stdout).to receive(:tty?).and_return(true)
+      ENV["TERM"] = "xterm-256color"
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow($stdin).to receive(:winsize).and_return([24, 80], [24, 40])
+      resized = Queue.new
+      allow(downloadable).to receive(:fetched_size) do
+        Process.kill(:WINCH, Process.pid)
+        resized << true
+        nil
+      end
+      # Keep the download pending until the resize so another frame is drawn.
+      allow(retryable_download).to receive(:fetch) do
+        resized.pop(timeout: 5)
+        cached_download
+      end
+
+      download_queue.enqueue(downloadable)
+
+      expect { download_queue.fetch }.to output(include("\e[J")).to_stdout
+    end
+  end
+
   it "leaves the final terminal column empty when rendering progress" do
     allow($stdout).to receive(:tty?).and_return(true)
     ENV["TERM"] = "xterm-256color"
