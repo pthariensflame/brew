@@ -710,6 +710,61 @@ module Homebrew
       end
 
       sig { returns(T.nilable(Finding)) }
+      def check_git_config_in_sandbox
+        require "download_strategy"
+
+        return unless Utils::Git.available?
+        return if Sandbox.nested_sandbox?
+        return unless Sandbox.use_for?("checking Git configuration", warn_without_sandbox: false)
+
+        sandbox = Sandbox.for_operation(home_read_exception: :git, network_access: true)
+        output = +""
+        begin
+          config = GitDownloadStrategy.sandboxed_git(
+            sandbox, "config", "--null", "--list", "--includes", timeout: 10
+          )
+          return if config.success?
+
+          output << config.stdout << "\0" << config.stderr
+          problem = "Git failed while reading configuration (#{config.status})."
+        rescue Timeout::Error
+          problem = "The Git configuration check timed out."
+        end
+
+        output.scrub!
+        paths = sandbox.denied_read_paths.select do |path|
+          output.match?(%r{#{Regexp.escape(path)}(?=/|[\s\0'"]|\z)})
+        end
+
+        remediation = <<~EOS
+          Check your global Git configuration and includes.
+          Correct unreadable paths or use files accessible to the sandbox.
+          Homebrew will not expand sandbox access for configured paths.
+          This check does not run credential helpers or verify authentication.
+        EOS
+        if paths.present?
+          remediation += append_indented_list(paths.map(&:inspect), <<~EOS)
+
+            Sandbox-restricted locations referenced by Git:
+          EOS
+        end
+
+        Finding.new(
+          <<~EOS,
+            Git checks failed inside Homebrew's download sandbox.
+            Git source downloads may also be affected.
+            #{problem}
+          EOS
+          remediation: Finding::Remediation.new(text: remediation),
+        )
+      rescue SystemCallError, RuntimeError
+        Finding.new(<<~EOS)
+          The Git configuration check could not run in Homebrew's download sandbox.
+          Check Homebrew's sandbox setup and temporary directory permissions.
+        EOS
+      end
+
+      sig { returns(T.nilable(Finding)) }
       def check_git_newline_settings
         return unless Utils::Git.available?
 
