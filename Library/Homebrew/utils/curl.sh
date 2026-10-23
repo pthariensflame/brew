@@ -1,6 +1,6 @@
 # curl selection and version checks plus Homebrew's user agents.
 
-# HOMEBREW_* variables set here are used across Homebrew's Bash scripts.
+# Variables set here are used across Homebrew's Bash scripts.
 # shellcheck disable=SC2034
 # These variables are set by bin/brew, brew.sh or the user environment.
 # shellcheck disable=SC2154
@@ -12,6 +12,42 @@ HOMEBREW_MINIMUM_CURL_VERSION="7.41.0"
 # We don't use --max-time to support slow connections
 HOMEBREW_CURL_SPEED_LIMIT=100
 HOMEBREW_CURL_SPEED_TIME=5
+
+# Set CURL_DISABLE_CURLRC_ARGS with all shared curl options.
+# Keep environment options in sync with Utils::Curl.curl_args in utils/curl.rb.
+setup_curl_args() {
+  # Personal curl defaults can change downloads or the output Homebrew parses.
+  # -q must be first to ignore them, even when the shim adds certificate options.
+  # Unset or empty HOMEBREW_CURLRC ignores defaults; an absolute path loads only
+  # that file. Other non-empty values enable defaults for backwards compatibility.
+  CURL_DISABLE_CURLRC_ARGS=()
+  if [[ -z "${HOMEBREW_CURLRC}" ]]
+  then
+    CURL_DISABLE_CURLRC_ARGS=(-q)
+  elif [[ "${HOMEBREW_CURLRC}" == /* ]]
+  then
+    CURL_DISABLE_CURLRC_ARGS=(-q --config "${HOMEBREW_CURLRC}")
+  fi
+
+  local retries="${HOMEBREW_CURL_RETRIES:-3}"
+  if [[ "${retries}" =~ ^[0-9]+$ ]] && ((10#${retries} > 0))
+  then
+    CURL_DISABLE_CURLRC_ARGS+=(--retry "${retries}")
+  fi
+
+  # Match Homebrew::EnvConfig::FALSY_VALUES in env_config.rb.
+  local falsy_values='^([fF][aA][lL][sS][eE]|[nN][oO]|[oO][fF][fF]|[nN][iI][lL]|0)?$'
+  if [[ ! "${HOMEBREW_CURL_VERBOSE}" =~ ${falsy_values} ]]
+  then
+    CURL_DISABLE_CURLRC_ARGS+=(--verbose)
+  fi
+
+  # Keep redirect policy in sync with Utils::Curl.no_insecure_redirect_curl_args in utils/curl.rb.
+  if [[ ! "${HOMEBREW_NO_INSECURE_REDIRECT}" =~ ${falsy_values} ]]
+  then
+    CURL_DISABLE_CURLRC_ARGS+=(--proto-redir "=https")
+  fi
+}
 
 setup_curl() {
   HOMEBREW_BREWED_CURL_PATH="${HOMEBREW_PREFIX}/opt/curl/bin/curl"

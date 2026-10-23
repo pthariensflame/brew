@@ -29,7 +29,15 @@ then
 fi
 if [[ ${set_certs} -eq 1 ]]
 then
-  set -- "--cacert" "${SSL_CERT_FILE}" "--capath" "$(dirname "${SSL_CERT_FILE}")" "$@"
+  CURL_DISABLE_CURLRC_ARGS=()
+  # Keep the caller's curlrc opt-out first, or curl silently loads its defaults.
+  # See setup_curl_args in utils/curl.sh for Homebrew's opt-in behaviour.
+  if [[ "$1" == "-q" || "$1" == "--disable" ]]
+  then
+    CURL_DISABLE_CURLRC_ARGS=("$1")
+    shift
+  fi
+  set -- "${CURL_DISABLE_CURLRC_ARGS[@]}" "--cacert" "${SSL_CERT_FILE}" "--capath" "$(dirname "${SSL_CERT_FILE}")" "$@"
 fi
 
 try_exec_non_system "${HOMEBREW_CURL:-curl}" "$@"

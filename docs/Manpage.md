@@ -4685,7 +4685,9 @@ command execution (e.g. `$(cat file)`).
 
 : If set to an absolute path (i.e. beginning with `/`), pass it with `--config`
   when invoking `curl`(1). If set but *not* a valid path, do not pass
-  `--disable`, which disables the use of `.curlrc`.
+  `--disable`, which disables the use of `.curlrc`. Git operations, including
+  repository fetches in `brew update`, do not use this file because Git uses its
+  own transport and configuration.
 
 `HOMEBREW_CURL_PATH`
 

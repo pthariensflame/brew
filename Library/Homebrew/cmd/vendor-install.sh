@@ -8,6 +8,7 @@
 # HOMEBREW_PHYSICAL_PROCESSOR, HOMEBREW_PROCESSOR, HOMEBREW_USER_AGENT_CURL are set by brew.sh
 # shellcheck disable=SC2154
 source "${HOMEBREW_LIBRARY}/Homebrew/utils/cmd.sh"
+source "${HOMEBREW_LIBRARY}/Homebrew/utils/curl.sh"
 source "${HOMEBREW_LIBRARY}/Homebrew/utils/lock.sh"
 source "${HOMEBREW_LIBRARY}/Homebrew/utils/ruby.sh"
 
@@ -113,18 +114,8 @@ fetch() {
   local temporary_path
   local curl_exit_code=0
 
-  curl_args=()
-
-  # do not load .curlrc unless requested (must be the first argument)
-  # HOMEBREW_CURLRC isn't misspelt here
-  # shellcheck disable=SC2153
-  if [[ -z "${HOMEBREW_CURLRC}" ]]
-  then
-    curl_args[${#curl_args[*]}]="-q"
-  elif [[ "${HOMEBREW_CURLRC}" == /* ]]
-  then
-    curl_args+=("-q" "--config" "${HOMEBREW_CURLRC}")
-  fi
+  setup_curl_args
+  curl_args=("${CURL_DISABLE_CURLRC_ARGS[@]}")
 
   # Authorization is needed for GitHub Packages but harmless on GitHub Releases
   curl_args+=(
