@@ -178,13 +178,16 @@ module GitHub
     end
 
     # Gets the token from the GitHub CLI for github.com.
-    sig { returns(T.nilable(String)) }
-    def self.github_cli_token
+    sig {
+      params(executable: T.any(String, Pathname), timeout: T.nilable(T.any(Float, Integer)))
+        .returns(T.nilable(String))
+    }
+    def self.github_cli_token(executable: "gh", timeout: nil)
       # Avoid `Formula["gh"].opt_bin` so this method works even with `HOMEBREW_DISABLE_LOAD_FORMULA`.
-      gh_out, _, result = system_command("gh",
+      gh_out, _, result = system_command(executable,
                                          args:         ["auth", "token", "--hostname", "github.com"],
                                          env:          Utils::Path.formula_opt_bin_env("gh"),
-                                         print_stderr: false).to_a
+                                         timeout:, print_stderr: false, debug: false, verbose: false).to_a
       return unless result.success?
 
       gh_out.chomp.presence

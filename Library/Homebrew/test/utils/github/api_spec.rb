@@ -4,6 +4,18 @@
 require "utils/github"
 
 RSpec.describe GitHub::API do
+  describe "::github_cli_token" do
+    it "uses the selected executable and timeout without printing lookup output" do
+      expect(described_class).to receive(:system_command).with(
+        Pathname("/trusted/bin/gh"), args: %w[auth token --hostname github.com],
+        env: Utils::Path.formula_opt_bin_env("gh"), timeout: 10, print_stderr: false, debug: false, verbose: false
+      ).and_return(instance_double(SystemCommand::Result,
+                                   to_a: ["test-token\n", "", instance_double(Process::Status, success?: true)]))
+
+      described_class.github_cli_token(executable: Pathname("/trusted/bin/gh"), timeout: 10)
+    end
+  end
+
   describe "::sleep_for_rate_limit" do
     it "sleeps for at least 1 second even if the rate limit has already reset" do
       exception = GitHub::API::RateLimitExceededError.new(
