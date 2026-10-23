@@ -249,7 +249,7 @@ class Pathname
   sig { params(src: Pathname).void }
   def make_relative_symlink(src)
     dirname.mkpath
-    File.symlink(src.relative_path_from(dirname), self)
+    File.symlink(Utils::Path.relative_path_from(src, dirname), self)
   end
 
   sig { params(block: T.proc.void).void }
