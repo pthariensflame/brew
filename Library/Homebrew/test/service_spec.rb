@@ -1186,6 +1186,31 @@ RSpec.describe Homebrew::Service do
       expect(unit).to eq(unit_expect)
     end
 
+    it "returns valid unit with keep_alive successful_exit false" do
+      f = stub_formula do
+        T.bind(self, T.class_of(Formula))
+        service do
+          run opt_bin/"beanstalkd"
+          keep_alive successful_exit: false
+        end
+      end
+
+      unit = f.service.to_systemd_unit
+      unit_expect = <<~SYSTEMD
+        [Unit]
+        Description=Homebrew generated unit for formula_name
+
+        [Install]
+        WantedBy=default.target
+
+        [Service]
+        Type=simple
+        ExecStart="#{HOMEBREW_PREFIX}/opt/#{name}/bin/beanstalkd"
+        Restart=on-failure
+      SYSTEMD
+      expect(unit).to eq(unit_expect)
+    end
+
     it "returns valid unit with stop_timeout" do
       f = stub_formula do
         T.bind(self, T.class_of(Formula))

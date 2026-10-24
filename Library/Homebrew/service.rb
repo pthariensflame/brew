@@ -685,8 +685,8 @@ module Homebrew
         if @keep_alive[:always].present? || @keep_alive[:crashed].present?
           # Use on-failure instead of always to allow manual stops via systemctl
           options << "Restart=on-failure"
-        elsif @keep_alive[:successful_exit].present?
-          options << "Restart=on-success"
+        elsif @keep_alive.key?(:successful_exit)
+          options << "Restart=#{@keep_alive[:successful_exit] ? "on-success" : "on-failure"}"
         end
       end
       options << "RestartSec=#{restart_delay}" if @restart_delay.present?
