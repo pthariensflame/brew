@@ -48,6 +48,22 @@ RSpec.describe Keg do
     expect(result.count).to eq 2
   end
 
+  specify "::text_matches_in_file finds a path preceded by a non-ASCII byte" do
+    ENV["LC_ALL"] = "en_US.UTF-8"
+    file.binwrite("\0\xD6#{dir}/file.txt\0".b)
+
+    expect(described_class.text_matches_in_file(file, dir.to_s, [], [], nil).count).to eq 1
+  end
+
+  specify "::text_matches_in_file finds a path containing non-ASCII characters",
+          unless: ENV.fetch("HOMEBREW_TEST_GENERIC_OS", nil) do
+    ENV["LC_ALL"] = "en_US.UTF-8"
+    (dir/"José").mkpath
+    file.binwrite("\0#{dir}/José\0".b)
+
+    expect(described_class.text_matches_in_file(file, dir.to_s, [], [], nil).count).to eq 1
+  end
+
   specify "::each_candidate_string still yields runs that are not valid UTF-8" do
     setup_file
 
