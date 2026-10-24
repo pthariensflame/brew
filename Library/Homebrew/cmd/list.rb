@@ -254,6 +254,7 @@ module Homebrew
           if args.verbose? || !$stdout.tty?
             find_args = %w[-not -type d -not -name .DS_Store -print]
             system_command! "find", args: kegs.map(&:to_s) + find_args, print_stdout: true if kegs.present?
+            casks.each { |cask| raise Cask::CaskNotInstalledError, cask unless cask.installed? }
             system_command! "find", args: casks.map(&:caskroom_path) + find_args, print_stdout: true if casks.present?
           else
             kegs.each { |keg| PrettyListing.new keg } if kegs.present?
