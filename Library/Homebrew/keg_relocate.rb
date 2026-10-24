@@ -742,9 +742,10 @@ class Keg
       end
 
       strings.filter_map do |offset, match|
-        next unless match.ascii_only?
+        match.force_encoding(Encoding::UTF_8)
+        next unless match.valid_encoding?
 
-        [offset.to_s(16), match.force_encoding(Encoding::UTF_8)]
+        [offset.to_s(16), match]
       end
     ensure
       stream.close

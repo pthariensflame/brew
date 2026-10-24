@@ -34,6 +34,24 @@ RSpec.describe Keg do
       expect(described_class.text_matches_in_file(file, dir.to_s, [], [], nil).size).to eq 1
     end
 
+    it "keeps referenced paths containing non-ASCII characters" do
+      rpath = dir/"José"
+      rpath.mkpath
+      patch_rpath rpath.to_s
+
+      expect(described_class.text_matches_in_file(file, dir.to_s, [], [], nil).map(&:first)).to eq [rpath.to_s]
+    end
+
+    it "drops referenced paths containing invalid UTF-8" do
+      rpath = "#{dir}/invalid-\xFF".b
+      patch_rpath rpath
+
+      candidates = []
+      described_class.each_candidate_string(file, dir.to_s) { |candidate| candidates << candidate.last.b }
+
+      expect(candidates).not_to include(rpath)
+    end
+
     it "drops dead loader strings nothing references any more" do
       # Shrinking the RPATH leaves an in-place `X` run inside `.dynstr`;
       # writing a prefix string over it recreates the dead bytes a moved or
@@ -94,6 +112,15 @@ RSpec.describe Keg do
       patch_interpreter interpreter
 
       expect(described_class.text_matches_in_file(file, dir.to_s, [], [], nil).size).to eq 1
+    end
+
+    it "keeps an interpreter containing non-ASCII characters" do
+      interpreter = dir/"ld-José.so"
+      FileUtils.touch interpreter
+      patch_rpath "#{Keg::PREFIX_PLACEHOLDER}/lib"
+      patch_interpreter interpreter.to_s.b
+
+      expect(described_class.text_matches_in_file(file, dir.to_s, [], [], nil).map(&:first)).to eq [interpreter.to_s]
     end
 
     it "drops old interpreter bytes the loader no longer uses" do
