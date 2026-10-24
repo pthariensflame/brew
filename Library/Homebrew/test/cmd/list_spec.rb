@@ -323,6 +323,12 @@ RSpec.describe Homebrew::Cmd::List do
       .to output(/Broken Caskroom symlinks \(`brew cleanup` removes them\): dangling-alias/).to_stderr
   end
 
+  it "fails for a named cask that is not installed when stdout is not a TTY", :cask do
+    expect { described_class.new(["--cask", "local-caffeine"]).run }
+      .to raise_error(Cask::CaskNotInstalledError, "Cask 'local-caffeine' is not installed.")
+      .and not_to_output.to_stdout
+  end
+
   it "fails only for explicitly named missing pinned packages", :cask do
     install_formula_version "testball", "0.1"
     (HOMEBREW_PREFIX/"var/homebrew/pinned").mkpath
