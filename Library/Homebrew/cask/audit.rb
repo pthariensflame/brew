@@ -735,7 +735,7 @@ module Cask
 
           signing_failure_message = <<~EOS
             Signature verification failed for #{path.relative_path_from(tmpdir)}:
-            #{result.merged_output}
+            #{result.merged_output.gsub(%r{\r?Progress: \d+/\d+\n?}, "")}
           EOS
 
           if cask.tap&.official?
