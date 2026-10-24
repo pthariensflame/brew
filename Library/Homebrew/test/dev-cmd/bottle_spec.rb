@@ -111,6 +111,14 @@ RSpec.describe Homebrew::DevCmd::Bottle do
     (formula.libexec/"raw-prefix").binwrite(
       "\0#{Array.new(Homebrew::DevCmd::Bottle::MAXIMUM_STRING_MATCHES + 1, formula.libexec.to_s).join("\0")}\0",
     )
+    require "patchelf"
+    library = formula.libexec/"José/libhello.so.0"
+    library.dirname.mkpath
+    FileUtils.cp TEST_FIXTURE_DIR/"elf/libhello.so.0", library
+    FileUtils.cp TEST_FIXTURE_DIR/"elf/hello", formula.libexec/"elf-prefix"
+    patcher = PatchELF::Patcher.new((formula.libexec/"elf-prefix").to_s, on_error: :silent)
+    patcher.add_needed(library.to_s.b)
+    patcher.save
     stderr = if !Sandbox.available?
       "Warning: Sandbox unavailable: processing downloaded files without sandboxing!\n"
     elsif Sandbox.nested_sandbox?
@@ -140,7 +148,7 @@ RSpec.describe Homebrew::DevCmd::Bottle do
       expect(tag.fetch("tab")).to include(
         "changed_files"           => be_an(Array),
         "linkage_files"           => be_an(Array),
-        "binary_relocation_files" => include("libexec/raw-prefix"),
+        "binary_relocation_files" => include("libexec/raw-prefix", "libexec/elf-prefix"),
         "built_prefix"            => HOMEBREW_PREFIX.to_s,
       )
       binary_relocation_diagnostics = tag.fetch("binary_relocation_diagnostics")
