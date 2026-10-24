@@ -10,6 +10,15 @@ module OS
 
       requires_ancestor { ::Keg }
 
+      module ClassMethods
+        # GNU `strings` splits runs at non-ASCII bytes, such as those in a
+        # prefix like `/Users/José`, unless asked to keep 8-bit bytes.
+        sig { returns(T::Array[String]) }
+        def strings_encoding_args
+          ["-e", "S"]
+        end
+      end
+
       sig {
         params(relocation: ::Keg::Relocation, with_placeholders: T::Boolean,
                files: T.nilable(T::Array[::Pathname])).returns(T::Array[::Pathname])
@@ -126,4 +135,5 @@ module OS
   end
 end
 
+Keg.singleton_class.prepend(OS::Linux::Keg::ClassMethods)
 Keg.prepend(OS::Linux::Keg)
