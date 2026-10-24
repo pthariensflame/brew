@@ -24,6 +24,56 @@ class GitHubPackages
   private_constant :URL_PREFIX
   private_constant :DOCKER_PREFIX
 
+  class Downloads < T::Struct
+    const :source, String
+    const :all_time, Integer
+    const :last_30_days, Integer
+    const :start_date, String
+    const :end_date, String
+    const :fetched_at, String
+  end
+
+  # GitHub's package overview includes exact totals and daily chart values.
+  # Cache successful snapshots per UTC day for CLI and API generation callers.
+  sig { params(formula_name: String).returns(T.nilable(Downloads)) }
+  def self.downloads(formula_name)
+    cache = HOMEBREW_CACHE/"github-packages-downloads/#{formula_name}.json"
+    if cache.exist?
+      begin
+        cached = Downloads.from_hash(JSON.parse(cache.read))
+        return cached if cached.fetched_at.start_with?(Time.now.utc.strftime("%F"))
+      rescue JSON::ParserError, TypeError, ArgumentError
+        nil
+      end
+    end
+
+    url = "https://github.com/Homebrew/homebrew-core/pkgs/container/core%2F" \
+          "#{image_formula_name(formula_name).gsub("/", "%2F")}"
+    output = Utils::Curl.curl_output("--fail", "--compressed", url)
+    return unless output.success?
+
+    total = output.stdout[%r{Total downloads</span>\s*<h3[^>]*title="(\d+)"}, 1]
+    chart = output.stdout[%r{aria-label="Downloads for the last 30 days">.*?</svg>}m]
+    return if total.nil? || chart.nil?
+
+    bars = chart.scan(/<rect\b[^>]*>/m).flatten
+    daily = bars.filter_map do |bar|
+      date = bar[/\bdata-date="(\d{4}-\d{2}-\d{2})"/, 1]
+      count = bar[/\bdata-merge-count="(\d+)"/, 1]
+      next if date.nil? || count.nil?
+
+      [date, count.to_i]
+    end.to_h
+    return if daily.empty? || daily.length != bars.length
+
+    dates = daily.keys.sort
+    downloads = Downloads.new(source: url, all_time: total.to_i, last_30_days: daily.values.sum,
+                              start_date: dates.fetch(0), end_date: dates.fetch(-1), fetched_at: Time.now.utc.iso8601)
+    cache.dirname.mkpath
+    cache.atomic_write(JSON.generate(downloads.serialize))
+    downloads
+  end
+
   URL_REGEX = %r{(?:#{Regexp.escape(URL_PREFIX)}|#{Regexp.escape(DOCKER_PREFIX)})([\w-]+)/([\w-]+)}
 
   # Valid OCI tag characters

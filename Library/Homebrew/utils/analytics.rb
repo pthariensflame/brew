@@ -290,7 +290,7 @@ module Utils
         end
       end
 
-      # This method is undocumented because it is not intended for general use.
+      # This flag is hidden because it is not intended for general use.
       # It relies on screen scraping some GitHub HTML that's not available as an API.
       # This seems very likely to break in the future.
       # That said, it's the only way to get the data we want right now.
@@ -299,55 +299,22 @@ module Utils
         return unless args.github_packages_downloads?
         return unless formula.core_formula?
 
-        require "tmpdir"
-        require "utils/curl"
-
-        escaped_formula_name = GitHubPackages.image_formula_name(formula.name)
-                                             .gsub("/", "%2F")
-        formula_url_suffix = "container/core%2F#{escaped_formula_name}/"
-        formula_url = "https://github.com/Homebrew/homebrew-core/pkgs/#{formula_url_suffix}"
-        output = Utils::Curl.curl_output("--fail", "--compressed", formula_url)
-        return unless output.success?
-
-        tag_urls = output.stdout
-                         .scan(%r{/orgs/Homebrew/packages/#{formula_url_suffix}(\d+\?tag=([^"]+))})
-                         .to_h { |version, tag| [tag.to_s, "#{formula_url}#{version}"] }
-        return if tag_urls.empty?
-
-        downloads_by_tag = Dir.mktmpdir("github-packages-downloads", HOMEBREW_TEMP) do |tmpdir|
-          Utils::Curl.curl_output("--fail", "--compressed", "--parallel",
-                                  *tag_urls.flat_map { |tag, url| ["--output", "#{tmpdir}/#{tag}.html", url] })
-
-          tag_urls.keys.filter_map do |tag|
-            version_html = Pathname("#{tmpdir}/#{tag}.html")
-            next unless version_html.exist?
-
-            downloads = version_html.read[%r{>Last 30 days</span>\s*<span[^>]*>([\d.,]+M?)<}, 1]
-            next if downloads.nil?
-
-            count = if downloads.end_with?("M")
-              (downloads.to_f * 1_000_000).to_i
-            else
-              downloads.tr(",", "").to_i
-            end
-            [tag, count]
-          end
-        end
-        missing_tags = tag_urls.keys - downloads_by_tag.map(&:first)
-        if missing_tags.any?
-          opoo "Failed to fetch GitHub Packages downloads for: #{missing_tags.join(", ")}"
+        downloads = GitHubPackages.downloads(formula.name)
+        unless downloads
+          opoo "Failed to fetch GitHub Packages downloads for: #{formula.name}"
           return
         end
 
-        table_output("github-packages-downloads", "30", downloads_by_tag.sort_by { |_, count| -count }.to_h,
-                     name_header: "Tag")
+        puts "GitHub Packages downloads (since Bintray migration): #{format_count(downloads.all_time)}"
+        puts "GitHub Packages downloads (30 days): #{format_count(downloads.last_30_days)}"
+        puts "Download dates: #{downloads.start_date} to #{downloads.end_date}; fetched #{downloads.fetched_at}"
 
         install_count = analytics.dig("install", "30d")&.values&.sum
         return unless install_count&.positive?
 
-        difference = ((downloads_by_tag.sum { |_, count| count } - install_count) * 100.0) / install_count
-        puts "Difference from #{format_count(install_count)} analytics install events (30 days): " \
-             "#{format("%+.2f", difference)}%"
+        puts "Downloads / analytics install events (30 days): " \
+             "#{format("%.2f", downloads.last_30_days.to_f / install_count)}x " \
+             "(#{format_count(install_count)} events)"
       end
 
       sig { params(formula: Formula, args: Homebrew::Cmd::Info::Args).void }
