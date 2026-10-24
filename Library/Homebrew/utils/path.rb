@@ -107,7 +107,33 @@ module Utils
         path.chmod saved_perms if saved_perms
       end
 
+      # `Pathname#relative_path_from` without its `cleanpath` calls for clean absolute paths.
+      sig { params(path: Pathname, base: Pathname).returns(Pathname) }
+      def relative_path_from(path, base)
+        path_string = path.to_s
+        base_string = base.to_s
+        if File::FNM_SYSCASE.zero? && clean_absolute_path?(path_string) && clean_absolute_path?(base_string)
+          base_prefix = "#{base_string}/"
+          return Pathname(path_string.delete_prefix(base_prefix)) if path_string.start_with?(base_prefix)
+
+          path_names = path_string.split("/").drop(1)
+          base_names = base_string.split("/").drop(1)
+          common = 0
+          common += 1 while common < path_names.length && path_names[common] == base_names[common]
+          names = Array.new(base_names.length - common, "..") + path_names.drop(common)
+          return Pathname(names.empty? ? "." : File.join(*names))
+        end
+
+        path.relative_path_from(base)
+      end
+
       private
+
+      sig { params(path: String).returns(T::Boolean) }
+      def clean_absolute_path?(path)
+        path.start_with?("/") && path.exclude?("//") && path.exclude?("/./") && path.exclude?("/../") &&
+          !path.end_with?("/.", "/..") && (path == "/" || !path.end_with?("/"))
+      end
 
       # `child_of?` is lexical, so resolve the deepest existing component first.
       # Stop at a symlink too: `exist?` follows one, hiding a dangling link.
@@ -124,11 +150,11 @@ module Utils
     extend Helpers
 
     private :child_of?, :ensure_child_of!, :cp_path_sub, :rmdir_if_possible, :text_executable?, :resolved_path,
-            :resolved_path_exists?, :ensure_writable
+            :resolved_path_exists?, :ensure_writable, :relative_path_from
 
     class << self
       public :child_of?, :ensure_child_of!, :cp_path_sub, :rmdir_if_possible, :text_executable?, :resolved_path,
-             :resolved_path_exists?, :ensure_writable
+             :resolved_path_exists?, :ensure_writable, :relative_path_from
     end
 
     sig { params(path: Pathname, verbose: T::Boolean).void }

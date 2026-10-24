@@ -225,6 +225,37 @@ RSpec.describe Utils::Path do
     end
   end
 
+  describe "::relative_path_from" do
+    it "returns the part of a path below its base" do
+      expect(described_class.relative_path_from(Pathname("/opt/homebrew/Cellar/wget/1.0/bin/wget"),
+                                                Pathname("/opt/homebrew/Cellar/wget/1.0")))
+        .to eq(Pathname("bin/wget"))
+    end
+
+    it "relates clean absolute paths" do
+      expect(described_class.relative_path_from(Pathname("/opt/homebrew/Cellar/wget/1.0/bin/wget"),
+                                                Pathname("/opt/homebrew/bin")))
+        .to eq(Pathname("../Cellar/wget/1.0/bin/wget"))
+    end
+
+    it "relates clean absolute paths with hidden directories" do
+      expect(described_class.relative_path_from(Pathname("/home/linuxbrew/.linuxbrew/Cellar/wget/1.0/bin/wget"),
+                                                Pathname("/home/linuxbrew/.linuxbrew/bin")))
+        .to eq(Pathname("../Cellar/wget/1.0/bin/wget"))
+    end
+
+    it "cleans `..` components" do
+      expect(described_class.relative_path_from(Pathname("/opt/homebrew/lib/../bin/wget"),
+                                                Pathname("/opt/homebrew/bin")))
+        .to eq(Pathname("wget"))
+    end
+
+    it "rejects mixing absolute and relative paths" do
+      expect { described_class.relative_path_from(Pathname("/opt/homebrew"), Pathname("bin")) }
+        .to raise_error(ArgumentError)
+    end
+  end
+
   describe "::formula_opt_prefix" do
     it "returns a formula opt prefix without loading a Formula object" do
       expect(described_class.formula_opt_prefix("foo")).to eq(HOMEBREW_PREFIX/"opt/foo")

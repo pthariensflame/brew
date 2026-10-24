@@ -367,13 +367,15 @@ class Keg
 
     keg_directories.each do |dir|
       dir.find do |src|
-        dst = HOMEBREW_PREFIX + src.relative_path_from(path)
+        dst = HOMEBREW_PREFIX + relative_path_from(src, path)
         dst.extend(ObserverPathnameExtension)
 
-        dirs << dst if dst.directory? && !dst.symlink?
+        unless dst.symlink?
+          dirs << dst if dst.directory?
+          next
+        end
 
         # check whether the file to be unlinked is from the current keg first
-        next unless dst.symlink?
         next if src != resolved_path(dst)
 
         if dry_run
@@ -912,7 +914,7 @@ class Keg
     root.find do |src|
       next if src == root
 
-      relative_src = src.relative_path_from(path)
+      relative_src = relative_path_from(src, path)
       dst = HOMEBREW_PREFIX + relative_src
       dst.extend ObserverPathnameExtension
 
@@ -929,7 +931,7 @@ class Keg
         # file is in the way.
         Find.prune if PYC_EXTENSIONS.include?(src.extname) && src.to_s.include?("/site-packages/")
 
-        case yield src.relative_path_from(root)
+        case yield relative_path_from(src, root)
         when :skip_file, nil
           Find.prune
         when :info
@@ -948,7 +950,7 @@ class Keg
         # spotlight, or the open command and actual mac apps use an equivalent
         Find.prune if src.extname == ".app"
 
-        case yield src.relative_path_from(root)
+        case yield relative_path_from(src, root)
         when :skip_dir
           Find.prune
         when :mkpath
