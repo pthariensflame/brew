@@ -1014,6 +1014,14 @@ RSpec.describe Cask::Audit, :cask do
           expect(run).to error_with(%r{Signature verification failed for Audit Suite/Bad\.app:})
         end
 
+        it "omits gktool progress from the error" do
+          (suite/"Bad.app").mkpath
+          allow(failed_result).to receive(:merged_output)
+            .and_return("\rProgress: 0/2\rProgress: 6/6\nScan completed, but failed because it is not signed.\n")
+          stub_check("gktool", "scan", suite/"Bad.app")
+          expect(run).to error_with(/Bad\.app:\nScan completed, but failed/)
+        end
+
         context "when the suite contains a .bundle directory" do
           let(:bundle) { suite/".install4j/Messages.bundle" }
 
