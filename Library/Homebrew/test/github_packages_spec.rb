@@ -4,6 +4,52 @@
 require "github_packages"
 
 RSpec.describe GitHubPackages do
+  describe ".downloads" do
+    before do
+      allow(Time).to receive(:now).and_return(Time.utc(2026, 10, 23, 12))
+      allow(Utils::Curl).to receive(:curl_output).and_return(
+        instance_double(SystemCommand::Result, success?: true, stdout: <<~HTML),
+          <span>Total downloads</span><h3 title="22776486">22.8M</h3>
+          <div aria-label="Downloads for the last 30 days"><svg>
+            <rect data-merge-count="1234" data-date="2026-10-23"></rect>
+            <rect data-date="2026-10-22" data-merge-count="2345"></rect>
+          </svg></div>
+        HTML
+      )
+    end
+
+    it "reads exact package totals instead of rounded totals or recent tags" do
+      expect(described_class.downloads("wget")&.serialize).to include(
+        "all_time" => 22_776_486, "last_30_days" => 3579,
+        "start_date" => "2026-10-22", "end_date" => "2026-10-23",
+        "fetched_at" => "2026-10-23T12:00:00Z"
+      )
+    end
+
+    it "reuses a successful snapshot on the same UTC day" do
+      described_class.downloads("wget")
+      expect(Utils::Curl).not_to receive(:curl_output)
+
+      described_class.downloads("wget")
+    end
+
+    it "refreshes a snapshot on the next UTC day" do
+      described_class.downloads("wget")
+      allow(Time).to receive(:now).and_return(Time.utc(2026, 10, 24))
+      expect(Utils::Curl).to receive(:curl_output).once
+
+      described_class.downloads("wget")
+    end
+
+    it "does not interpret missing chart data as zero downloads" do
+      allow(Utils::Curl).to receive(:curl_output).and_return(
+        instance_double(SystemCommand::Result, success?: true, stdout: '<h3 title="100">100</h3>'),
+      )
+
+      expect(described_class.downloads("wget")).to be_nil
+    end
+  end
+
   describe "#upload_bottles" do
     it "reports progress when uploading many bottles" do
       github_packages = described_class.new
