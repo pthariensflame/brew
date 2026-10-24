@@ -269,6 +269,26 @@ RSpec.describe Sandbox do
       allow(described_class).to receive(:isolate_operation?).and_call_original
     end
 
+    it "allows reading only its private temporary directory under a denied parent" do
+      temporary_directory = mktmpdir
+      outside = temporary_directory/"outside"
+      outside.write("secret")
+      sandbox.deny_read_path temporary_directory
+      result = sandbox.capture(RbConfig.ruby, temporary_directory:, args: ["-e", <<~RUBY, outside])
+        file = File.join(ENV.fetch("TMPDIR"), "archive")
+        File.write(file, "contents")
+        puts File.read(file)
+        begin
+          File.read(ARGV.fetch(0))
+          abort "Read escaped the sandbox"
+        rescue Errno::EPERM, Errno::EACCES
+          nil
+        end
+      RUBY
+
+      expect(result.stdout).to eq("contents\n")
+    end
+
     it "allows its output directory and denies writes through an escaping symlink" do
       directory = mktmpdir
       output = directory/"output"

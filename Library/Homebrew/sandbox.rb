@@ -902,6 +902,7 @@ class Sandbox
 
   sig { params(tmpdir: String).returns(T::Hash[String, String]) }
   def sandbox_environment(tmpdir)
+    allow_read path: tmpdir, type: :subpath
     allow_write_path(tmpdir)
     allow_network path: tmpdir, type: :subpath
     { "HOMEBREW_TEMP" => tmpdir, "TMPDIR" => tmpdir, "TEMP" => tmpdir, "TMP" => tmpdir }
