@@ -641,27 +641,16 @@ EOS
   fi
 
   # we may want to use a Homebrew curl
-  if [[ -n "${HOMEBREW_FORCE_BREWED_CURL}" && ! -x "${HOMEBREW_PREFIX}/opt/curl/bin/curl" ]]
+  if [[ -n "${HOMEBREW_FORCE_BREWED_CURL}" && "${HOMEBREW_CURL}" != "${HOMEBREW_PREFIX}/opt/curl/bin/curl" ]]
   then
-    # we cannot install a Homebrew cURL if homebrew/core is unavailable.
-    if [[ -z "${HOMEBREW_CORE_AVAILABLE}" ]] || ! brew install curl
-    then
-      odie "'curl' must be installed and in your PATH!"
-    fi
-
-    setup_curl
+    install_tool curl "${HOMEBREW_MINIMUM_CURL_VERSION}"
   fi
 
   if ! (git --version) &>/dev/null ||
-     [[ -n "${HOMEBREW_FORCE_BREWED_GIT}" && ! -x "${HOMEBREW_PREFIX}/opt/git/bin/git" ]]
+     [[ -n "${HOMEBREW_FORCE_BREWED_GIT}" && "${HOMEBREW_GIT}" != "${HOMEBREW_PREFIX}/opt/git/bin/git" ]]
   then
     # Keep Git bootstrapping in sync with utils/git.rb.
-    if [[ -z "${HOMEBREW_CORE_AVAILABLE}" ]] || ! brew install git
-    then
-      odie "'git' must be installed and in your PATH!"
-    fi
-
-    setup_git
+    install_tool git "${HOMEBREW_MINIMUM_GIT_VERSION}"
   fi
 
   shallow_repository "${HOMEBREW_CORE_REPOSITORY}" && HOMEBREW_CORE_SHALLOW=1

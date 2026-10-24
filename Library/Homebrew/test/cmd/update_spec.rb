@@ -33,7 +33,7 @@ RSpec.describe Homebrew::Cmd::Update do
   def setup_update_utils
     (test_root/"Library/Homebrew/utils").mkpath
     FileUtils.ln_s repository_root/"Library/Homebrew/utils.sh", test_root/"Library/Homebrew/utils.sh"
-    %w[api cmd curl executables formatter lock tty].each do |name|
+    %w[api cmd curl executables formatter lock tool tty].each do |name|
       FileUtils.ln_s repository_root/"Library/Homebrew/utils/#{name}.sh",
                      test_root/"Library/Homebrew/utils/#{name}.sh"
     end
@@ -76,6 +76,64 @@ RSpec.describe Homebrew::Cmd::Update do
     )
 
     expect([status.exitstatus, stdout, stderr]).to eq([0, "install git\ngit-ready\n", ""])
+  end
+
+  test_each(%w[git curl]) do |tool|
+    it "keeps #{tool} selection after an ordinary command failure" do
+      setup_update_utils
+      executable = test_root/tool
+      executable.write "#!/bin/bash\necho original-error >&2\nexit 128\n"
+      executable.chmod(0755)
+      selection_cache = test_root/"cache/tool-selection"/tool
+      selection_cache.dirname.mkpath
+      selection_cache.write "cached selection"
+
+      _stdout, stderr, status = run_update_shell(
+        <<~SH,
+          source "#{update_script}"
+          #{tool}
+        SH
+        {
+          "#{tool.upcase}_EXECUTABLE" => executable.to_s,
+          "HOMEBREW_LIBRARY"          => (test_root/"Library").to_s,
+          "HOMEBREW_CACHE"            => (test_root/"cache").to_s,
+        },
+      )
+
+      expect([status.exitstatus, stderr, selection_cache.exist?]).to eq([128, "original-error\n", true])
+    end
+
+    it "installs forced #{tool} when its installed executable was rejected" do
+      setup_update_utils
+      installed_tool = test_root/"opt"/tool/"bin"/tool
+      installed_tool.dirname.mkpath
+      installed_tool.write "#!/bin/bash\nexit 1\n"
+      installed_tool.chmod(0755)
+
+      stdout, stderr, status = run_update_shell(
+        <<~SH,
+          source "#{update_script}"
+          git() { return 0; }
+          brew() { echo "$*"; }
+          setup_#{tool}() { echo ready; exit 0; }
+          git_init_if_necessary() { exit 2; }
+          homebrew-update
+        SH
+        {
+          "HOMEBREW_CELLAR"                       => (test_root/"Cellar").to_s,
+          "HOMEBREW_PREFIX"                       => test_root.to_s,
+          "HOMEBREW_FORCE_BREWED_CA_CERTIFICATES" => nil,
+          "HOMEBREW_FORCE_BREWED_CURL"            => (tool == "curl") ? "1" : nil,
+          "HOMEBREW_FORCE_BREWED_GIT"             => (tool == "git") ? "1" : nil,
+          "HOMEBREW_LIBRARY"                      => (test_root/"Library").to_s,
+          "HOMEBREW_NO_INSTALL_FROM_API"          => nil,
+          "HOMEBREW_REPOSITORY"                   => test_root.to_s,
+          "HOMEBREW_#{tool.upcase}"               => "/usr/bin/#{tool}",
+        },
+      )
+
+      expect([status.exitstatus, stdout, stderr]).to eq([0, "install #{tool}\nready\n", ""])
+    end
   end
 
   it "detects shallow clones and their linked worktrees but not full clones" do
@@ -360,6 +418,7 @@ RSpec.describe Homebrew::Cmd::Update do
       SH
       {
         "HOMEBREW_CURL_SUPPORTS_ETAGS" => "1",
+        "HOMEBREW_CURL_VERSION"        => nil,
         "HOMEBREW_LIBRARY"             => (test_root/"Library").to_s,
       },
     )

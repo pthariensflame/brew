@@ -666,6 +666,54 @@ module Homebrew
         )
       end
 
+      sig { returns(T::Array[Finding]) }
+      def check_tools
+        require "utils/curl"
+        require "utils/tool"
+
+        %w[git curl].filter_map do |tool|
+          minimum = ENV.fetch("HOMEBREW_MINIMUM_#{tool.upcase}_VERSION")
+          if tool == "git"
+            Utils::Git.clear_available_cache
+          else
+            Utils::Curl.clear_path_cache
+          end
+          # Always probe the executable, then reselect and retry once on failure.
+          next if 2.times.any? do
+            begin
+              result = system_command "/bin/bash", args: ["-c", <<~SH], timeout: 10, print_stderr: false
+                source "${HOMEBREW_LIBRARY}/Homebrew/utils.sh"
+                source "${HOMEBREW_LIBRARY}/Homebrew/utils/#{tool}.sh"
+                setup_#{tool}
+                printf '%s\\0' "${HOMEBREW_SELECTED_TOOL}"
+                [[ -n "${HOMEBREW_SELECTED_TOOL}" ]] || exit 1
+                exec "${HOMEBREW_SELECTED_TOOL}" --version
+              SH
+              path, output = result.stdout.split("\0", 2)
+              version = output&.[](/^#{tool}(?: version)? (\d+(?:\.\d+)+)/, 1)
+              if result.success? && path.present? && version && Version.new(version) >= Version.new(minimum)
+                ENV["HOMEBREW_#{tool.upcase}"] = path
+                if tool == "curl"
+                  ENV["HOMEBREW_CURL_VERSION"] = version
+                  ENV["HOMEBREW_CURL_VERSION_PATH"] = path
+                end
+                next true
+              end
+            rescue Timeout::Error, SystemCallError
+              # A failed launch or hung version probe also invalidates selection.
+            end
+            Utils::Tool.invalidate_cache(tool.to_sym)
+            false
+          end
+
+          Finding.new(<<~EOS)
+            Homebrew could not find a working #{tool} after refreshing its cached selection.
+            Minimum required version: #{minimum}
+            Initial executable: #{ENV.fetch("HOMEBREW_#{tool.upcase}", tool)}
+          EOS
+        end
+      end
+
       sig { returns(T.nilable(Finding)) }
       def check_git_version
         minimum_version = ENV.fetch("HOMEBREW_MINIMUM_GIT_VERSION")

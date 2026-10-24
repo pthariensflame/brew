@@ -94,7 +94,12 @@ module Utils
 
     sig { void }
     def clear_path_cache
+      ENV.delete("HOMEBREW_CURL_VERSION")
+      ENV.delete("HOMEBREW_CURL_VERSION_PATH")
       @curl_path = nil
+      @curl_version = nil
+      @curl_supports_fail_with_body = nil
+      @curl_supports_tls13 = nil
     end
 
     # Keep environment options in sync with setup_curl_args in utils/curl.sh.
@@ -727,11 +732,22 @@ module Utils
 
     sig { returns(Version) }
     def curl_version
+      # setup_curl in utils/curl.sh passes the version for its selected executable.
+      if (version = ENV.fetch("HOMEBREW_CURL_VERSION", nil))&.match?(/\A\d+\.\d+(?:\.\d+)?\z/) &&
+         curl_path == ENV["HOMEBREW_CURL_VERSION_PATH"] && curl_path == ENV["HOMEBREW_CURL"]
+        return Version.new(version)
+      end
+
       @curl_version ||= T.let({}, T.nilable(T::Hash[String, Version]))
       @curl_version[curl_path] ||= begin
-        curl_v_stdout = curl_output("-V").stdout
-        version = curl_v_stdout[/curl (\d+(?:\.\d+)+)/, 1]
-        odie("Failed to parse curl version from #{curl_v_stdout}") if version.nil?
+        result = curl_output("-V")
+        version = result.stdout[/curl (\d+(?:\.\d+)+)/, 1]
+        if !result.success? || version.nil?
+          require "utils/tool"
+          Utils::Tool.invalidate_cache(:curl)
+          result.assert_success!
+          odie("Failed to parse curl version from #{result.stdout}")
+        end
         Version.new(version)
       end
     end

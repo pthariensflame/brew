@@ -286,8 +286,8 @@ module Homebrew
                      "Git uses its own transport and configuration.",
       },
       HOMEBREW_CURL_PATH:                        {
-        description: "Linux only: Set this value to a new enough `curl` executable for Homebrew to use.",
-        default:     "curl",
+        description: "Suggest a `curl` executable for Homebrew to use. " \
+                     "Homebrew may prefer another executable for security or reliability.",
       },
       HOMEBREW_CURL_RETRIES:                     {
         description: "Pass the given retry count to `--retry` when invoking `curl`(1).",
@@ -423,13 +423,13 @@ module Homebrew
         boolean:     :set,
       },
       HOMEBREW_FORCE_BREWED_CURL:                {
-        description: "If set, always use a Homebrew-installed `curl`(1) rather than the system version. " \
-                     "Automatically set if the system version of `curl` is too old.",
+        description: "If set, prefer a Homebrew-installed `curl`(1), installing it if needed. " \
+                     "Automatically set if no suitable `curl` is available.",
         boolean:     :set,
       },
       HOMEBREW_FORCE_BREWED_GIT:                 {
-        description: "If set, always use a Homebrew-installed `git`(1) rather than the system version. " \
-                     "Automatically set if the system version of `git` is too old.",
+        description: "If set, prefer a Homebrew-installed `git`(1), installing it if needed. " \
+                     "Automatically set if no suitable `git` is available.",
         boolean:     :set,
       },
       HOMEBREW_FORCE_BREW_WRAPPER:               {
@@ -492,8 +492,8 @@ module Homebrew
                      "this value.",
       },
       HOMEBREW_GIT_PATH:                         {
-        description: "Linux only: Set this value to a new enough `git` executable for Homebrew to use.",
-        default:     "git",
+        description: "Suggest a `git` executable for Homebrew to use. " \
+                     "Homebrew may prefer another executable for security or reliability.",
       },
       HOMEBREW_INSTALL_BADGE:                    {
         description:  "Print this text before the installation summary of each successful build.",
@@ -741,8 +741,8 @@ module Homebrew
         boolean:     true,
       },
       HOMEBREW_SVN:                              {
-        description:  "Use this as the `svn`(1) binary.",
-        default_text: "A Homebrew-built Subversion (if installed), or the system-provided binary.",
+        description: "Suggest an `svn`(1) executable for Homebrew to use. " \
+                     "Homebrew may prefer another executable for security or reliability.",
       },
       HOMEBREW_SYSTEM_ENV_TAKES_PRIORITY:        {
         description: "If set in Homebrew's system-wide environment file (`/etc/homebrew/brew.env`), " \

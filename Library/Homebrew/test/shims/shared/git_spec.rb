@@ -30,6 +30,48 @@ RSpec.describe "shims/shared/git", type: :system do
       .to eq("You must: brew install #{tool}\n")
   end
 
+  context "when selecting Subversion" do
+    let(:test_root) { mktmpdir }
+    let(:shim) { test_root/"svn" }
+
+    before do
+      {
+        "opt/subversion/bin/svn" => "1.14.5",
+        "usr/bin/svn"            => "1.10.0",
+        "custom/svn"             => "1.15.0",
+      }.each do |path, version|
+        executable = test_root/path
+        executable.dirname.mkpath
+        executable.write <<~SH
+          #!/bin/bash
+          if [[ "$1" == --version ]]; then
+            echo 'svn, version #{version} (vendor build)'
+          else
+            echo '#{path}'
+          fi
+        SH
+        executable.chmod(0755)
+      end
+      shim.write (HOMEBREW_SHIMS_PATH/"shared/git").read.gsub("/usr/bin/svn", "#{test_root}/usr/bin/svn")
+      shim.chmod(0755)
+      ENV["HOMEBREW_PREFIX"] = test_root.to_s
+      ENV["HOMEBREW_CACHE"] = (test_root/"cache").to_s
+      ENV["HOMEBREW_SVN"] = (test_root/"custom/svn").to_s
+    end
+
+    it "prefers a working installed Subversion to the suggestion" do
+      expect(SystemCommand.run(shim).stdout).to eq("opt/subversion/bin/svn\n")
+    end
+
+    it "rejects the shared shim as a suggestion" do
+      (test_root/"opt/subversion/bin/svn").unlink
+      (test_root/"usr/bin/svn").unlink
+      ENV["HOMEBREW_SVN"] = (HOMEBREW_SHIMS_PATH/"shared/svn").to_s
+
+      expect(SystemCommand.run(shim, timeout: 2).stderr).to eq("You must: brew install subversion\n")
+    end
+  end
+
   context "when selecting Apple Git" do
     let(:test_root) { mktmpdir }
     let(:developer_dir) { test_root/"Developer Tools" }

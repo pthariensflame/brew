@@ -17,6 +17,16 @@ RSpec.describe SubversionDownloadStrategy do
       allow(strategy).to receive(:repo_url).and_return("#{url}/old")
     end
 
+    it "preserves the selected tool and original download error" do
+      selection_cache = HOMEBREW_CACHE/"tool-selection/svn"
+      selection_cache.dirname.mkpath
+      selection_cache.write "cached selection"
+      error = ErrorDuringExecution.new(["svn", "checkout"], status: 1)
+      allow(strategy).to receive(:system_command!).and_raise(error)
+
+      expect { strategy.fetch }.to raise_error(error) { expect(selection_cache).to exist }
+    end
+
     context "with :trust_cert set" do
       let(:specs) { { trust_cert: true } }
 

@@ -24,13 +24,19 @@ case "${tool}" in
     if [[ -n "${HOMEBREW_GIT}" && "${HOMEBREW_GIT}" != git ]]
     then
       safe_exec "$(type -P "${HOMEBREW_GIT}")" "$@"
+      echo "Could not execute the selected Git: ${HOMEBREW_GIT}" >&2
+      exit 1
     fi
     ;;
   svn)
-    if [[ -n "${HOMEBREW_SVN}" && "${HOMEBREW_SVN}" != svn ]]
+    source "${HOMEBREW_LIBRARY}/Homebrew/utils.sh"
+    # Subversion has no minimum version requirement.
+    if select_tool svn 0 "${HOMEBREW_PREFIX}/opt/subversion/bin/svn" /usr/bin/svn "${HOMEBREW_SVN}" ""
     then
-      safe_exec "$(type -P "${HOMEBREW_SVN}")" "$@"
+      safe_exec "${HOMEBREW_SELECTED_TOOL}" "$@"
     fi
+    echo "You must: brew install subversion" >&2
+    exit 1
     ;;
 esac
 

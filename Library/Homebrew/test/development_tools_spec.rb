@@ -2,10 +2,27 @@
 # frozen_string_literal: true
 
 require "development_tools"
+require "utils/curl"
 
 RSpec.describe DevelopmentTools do
   sig { returns(T.class_of(DevelopmentTools)) }
   subject(:development_tools) { Class.new(described_class) }
+
+  describe ".curl_substitution_required?" do
+    before do
+      allow(development_tools).to receive(:curl_handles_most_https_certificates?).and_return(false)
+      stub_const("HOMEBREW_BREWED_CURL_PATH", mktmpdir/"curl")
+      ENV["HOMEBREW_MINIMUM_CURL_VERSION"] = "7.41.0"
+    end
+
+    test_each([["7.40.0", true], ["7.41.0", false]]) do |version, required|
+      it "requires substitution=#{required} when the selected curl is #{version}" do
+        allow(Utils::Curl).to receive(:curl_version).and_return(Version.new(version))
+
+        expect(development_tools.curl_substitution_required?).to eq(required)
+      end
+    end
+  end
 
   describe ".llvm_clang_build_version" do
     it "deprecates the LLVM Clang probe" do

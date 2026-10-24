@@ -23,6 +23,11 @@ module Utils
         stdout, _, status = system_command(HOMEBREW_SHIMS_PATH/"shared/svn", args:         ["--version"],
                                                                              print_stderr: false).to_a
         @version = T.let(status.success? ? stdout.chomp[/svn, version (\d+(?:\.\d+)*)/, 1] : nil, T.nilable(String))
+        if @version.nil?
+          require "utils/tool"
+          Utils::Tool.invalidate_cache(:svn)
+        end
+        @version
       end
 
       sig { params(url: String).returns(T::Boolean) }

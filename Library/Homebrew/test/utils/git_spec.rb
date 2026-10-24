@@ -202,6 +202,20 @@ RSpec.describe Utils::Git do
   end
 
   describe "::version" do
+    test_each([true, false]) do |success|
+      it "invalidates selection after an invalid version probe (success: #{success})" do
+        selection_cache = HOMEBREW_CACHE/"tool-selection/git"
+        selection_cache.dirname.mkpath
+        selection_cache.write "cached selection"
+        status = instance_double(Process::Status, success?: success)
+        stdout = success ? "invalid version" : "git version 99.0.0"
+        allow(described_class).to receive(:system_command)
+          .and_return(instance_double(SystemCommand::Result, to_a: [stdout, "", status]))
+
+        expect([described_class.version, selection_cache.exist?]).to eq([Version::NULL, false])
+      end
+    end
+
     it "returns null when git is not available" do
       stub_const("HOMEBREW_SHIMS_PATH", HOMEBREW_PREFIX/"bin/shim")
       expect(described_class.version).to be Version::NULL

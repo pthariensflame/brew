@@ -190,7 +190,11 @@ class DevelopmentTools
 
     sig { returns(T::Boolean) }
     def curl_substitution_required?
-      !curl_handles_most_https_certificates? && !HOMEBREW_BREWED_CURL_PATH.exist?
+      return false if curl_handles_most_https_certificates? || HOMEBREW_BREWED_CURL_PATH.exist?
+
+      require "utils/curl"
+
+      Utils::Curl.curl_version < Version.new(ENV.fetch("HOMEBREW_MINIMUM_CURL_VERSION"))
     end
 
     sig { returns(T::Hash[String, T.nilable(String)]) }

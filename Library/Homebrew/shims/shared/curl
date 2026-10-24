@@ -40,8 +40,13 @@ then
   set -- "${CURL_DISABLE_CURLRC_ARGS[@]}" "--cacert" "${SSL_CERT_FILE}" "--capath" "$(dirname "${SSL_CERT_FILE}")" "$@"
 fi
 
-try_exec_non_system "${HOMEBREW_CURL:-curl}" "$@"
-safe_exec "/usr/bin/curl" "$@"
+if [[ -n "${HOMEBREW_CURL}" && "${HOMEBREW_CURL}" != curl ]]
+then
+  safe_exec "${HOMEBREW_CURL}" "$@"
+else
+  try_exec_non_system curl "$@"
+  safe_exec "/usr/bin/curl" "$@"
+fi
 
 echo "Could not execute curl. Try setting HOMEBREW_FORCE_BREWED_CURL=1" >&2
 exit 1
