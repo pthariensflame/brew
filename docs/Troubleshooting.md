@@ -14,6 +14,9 @@ Use this checklist before creating a Homebrew issue.
 4. Correct warnings that apply to the failing command.
 5. Retry the original command and keep its complete output.
 
+`brew doctor` also checks the Git and curl executables.
+If a tool fails its version check, this clears its cached selection and retries once.
+
 Do not apply destructive Git, ownership or permission changes from an old issue report without understanding which files they affect.
 See [Common Issues](Common-Issues.md) for current recovery guidance.
 

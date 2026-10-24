@@ -4691,10 +4691,8 @@ command execution (e.g. `$(cat file)`).
 
 `HOMEBREW_CURL_PATH`
 
-: Linux only: Set this value to a new enough `curl` executable for Homebrew to
-  use.
-  
-  *Default:* `curl`.
+: Suggest a `curl` executable for Homebrew to use. Homebrew may prefer another
+  executable for security or reliability.
 
 `HOMEBREW_CURL_RETRIES`
 
@@ -4831,13 +4829,13 @@ command execution (e.g. `$(cat file)`).
 
 `HOMEBREW_FORCE_BREWED_CURL`
 
-: If set, always use a Homebrew-installed `curl`(1) rather than the system
-  version. Automatically set if the system version of `curl` is too old.
+: If set, prefer a Homebrew-installed `curl`(1), installing it if needed.
+  Automatically set if no suitable `curl` is available.
 
 `HOMEBREW_FORCE_BREWED_GIT`
 
-: If set, always use a Homebrew-installed `git`(1) rather than the system
-  version. Automatically set if the system version of `git` is too old.
+: If set, prefer a Homebrew-installed `git`(1), installing it if needed.
+  Automatically set if no suitable `git` is available.
 
 `HOMEBREW_FORCE_VENDOR_RUBY`
 
@@ -4905,10 +4903,8 @@ command execution (e.g. `$(cat file)`).
 
 `HOMEBREW_GIT_PATH`
 
-: Linux only: Set this value to a new enough `git` executable for Homebrew to
-  use.
-  
-  *Default:* `git`.
+: Suggest a `git` executable for Homebrew to use. Homebrew may prefer another
+  executable for security or reliability.
 
 `HOMEBREW_INSTALL_BADGE`
 
@@ -5113,10 +5109,8 @@ command execution (e.g. `$(cat file)`).
 
 `HOMEBREW_SVN`
 
-: Use this as the `svn`(1) binary.
-  
-  *Default:* A Homebrew-built Subversion (if installed), or the system-provided
-  binary.
+: Suggest an `svn`(1) executable for Homebrew to use. Homebrew may prefer
+  another executable for security or reliability.
 
 `HOMEBREW_SYSTEM_ENV_TAKES_PRIORITY`
 

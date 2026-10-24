@@ -11,44 +11,27 @@
 HOMEBREW_MINIMUM_GIT_VERSION="2.30.0"
 
 setup_git() {
-  if [[ -n "${HOMEBREW_FORCE_BREWED_GIT}" && -x "${HOMEBREW_PREFIX}/opt/git/bin/git" ]] &&
-     "${HOMEBREW_PREFIX}/opt/git/bin/git" --version &>/dev/null
+  local system_git="/usr/bin/git" developer_dir
+  if [[ -n "${HOMEBREW_MACOS}" && -x /usr/bin/xcode-select ]]
   then
-    HOMEBREW_GIT="${HOMEBREW_PREFIX}/opt/git/bin/git"
-  elif [[ -n "${HOMEBREW_GIT_PATH}" ]]
-  then
-    HOMEBREW_GIT="${HOMEBREW_GIT_PATH}"
-  else
-    HOMEBREW_GIT="git"
-  fi
-}
-
-# Ensure the system Git is at or newer than the minimum required version.
-check-git-version() {
-  [[ -z "${HOMEBREW_MACOS}" ]] || return 0
-
-  local git_version_output major minor micro build extra message
-  git_version_output="$(${HOMEBREW_GIT} --version 2>/dev/null)"
-  # $extra is intentionally discarded.
-  IFS='.' read -r major minor micro build extra < <(printf '%s' "${git_version_output##* }")
-  if [[ "$(numeric "${major}.${minor}.${micro}.${build}")" -lt "$(numeric "${HOMEBREW_MINIMUM_GIT_VERSION}")" ]]
-  then
-    message="Please update your system Git or set HOMEBREW_GIT_PATH to a newer version.
-Minimum required version: ${HOMEBREW_MINIMUM_GIT_VERSION}
-        Your Git version: ${major}.${minor}.${micro}.${build}
-     Your Git executable: $(unset git && type -p "${HOMEBREW_GIT}")"
-    if [[ -z ${HOMEBREW_GIT_PATH} ]]
+    # /usr/bin/git opens an installation prompt without developer tools.
+    developer_dir="$(/usr/bin/xcode-select -print-path 2>/dev/null)"
+    system_git=""
+    if [[ -n "${developer_dir}" && "${developer_dir}" != / ]]
     then
-      HOMEBREW_FORCE_BREWED_GIT="1"
-      if [[ -z ${HOMEBREW_GIT_WARNING} ]]
-      then
-        onoe "${message}"
-        HOMEBREW_GIT_WARNING=1
-      fi
-    else
-      odie "${message}"
+      system_git="${developer_dir}/usr/bin/git"
     fi
   fi
+  select_tool git "${HOMEBREW_MINIMUM_GIT_VERSION}" "${HOMEBREW_PREFIX}/opt/git/bin/git" \
+    "${system_git}" "${HOMEBREW_GIT_PATH}" "${HOMEBREW_FORCE_BREWED_GIT}"
+  HOMEBREW_GIT="${HOMEBREW_SELECTED_TOOL:-/usr/bin/false}"
+  HOMEBREW_GIT_VERSION="${HOMEBREW_SELECTED_TOOL_VERSION}"
+}
+
+check-git-version() {
+  [[ -z "${HOMEBREW_GIT_VERSION}" ]] || return 0
+  HOMEBREW_FORCE_BREWED_GIT=1
+  install_tool git "${HOMEBREW_MINIMUM_GIT_VERSION}"
 }
 
 # Read all the `homebrew.*` values from Homebrew's repository Git configuration

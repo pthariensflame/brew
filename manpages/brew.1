@@ -2995,11 +2995,7 @@ Use this URL as the Homebrew/homebrew\-core \fBgit\fP(1) remote\.
 If set to an absolute path (i\.e\. beginning with \fB/\fP), pass it with \fB\-\-config\fP when invoking \fBcurl\fP(1)\. If set but \fInot\fP a valid path, do not pass \fB\-\-disable\fP, which disables the use of \fB\&\.curlrc\fP\&\. Git operations, including repository fetches in \fBbrew update\fP, do not use this file because Git uses its own transport and configuration\.
 .TP
 \fBHOMEBREW_CURL_PATH\fP
-Linux only: Set this value to a new enough \fBcurl\fP executable for Homebrew to use\.
-.RS
-.P
-\fIDefault:\fP \fBcurl\fP\&\.
-.RE
+Suggest a \fBcurl\fP executable for Homebrew to use\. Homebrew may prefer another executable for security or reliability\.
 .TP
 \fBHOMEBREW_CURL_RETRIES\fP
 Pass the given retry count to \fB\-\-retry\fP when invoking \fBcurl\fP(1)\.
@@ -3101,10 +3097,10 @@ If set, update the Homebrew API formula or cask data even if \fB$HOMEBREW_NO_AUT
 If set, always use a Homebrew\-installed \fBca\-certificates\fP rather than the system version\.
 .TP
 \fBHOMEBREW_FORCE_BREWED_CURL\fP
-If set, always use a Homebrew\-installed \fBcurl\fP(1) rather than the system version\. Automatically set if the system version of \fBcurl\fP is too old\.
+If set, prefer a Homebrew\-installed \fBcurl\fP(1), installing it if needed\. Automatically set if no suitable \fBcurl\fP is available\.
 .TP
 \fBHOMEBREW_FORCE_BREWED_GIT\fP
-If set, always use a Homebrew\-installed \fBgit\fP(1) rather than the system version\. Automatically set if the system version of \fBgit\fP is too old\.
+If set, prefer a Homebrew\-installed \fBgit\fP(1), installing it if needed\. Automatically set if no suitable \fBgit\fP is available\.
 .TP
 \fBHOMEBREW_FORCE_VENDOR_RUBY\fP
 If set, always use Homebrew\[u2019]s vendored, relocatable Ruby version even if the system version of Ruby is new enough\.
@@ -3148,11 +3144,7 @@ Set the Git author name and, if \fB$HOMEBREW_GIT_COMMITTER_EMAIL\fP is unset, co
 Set the Git author name and, if \fB$HOMEBREW_GIT_COMMITTER_NAME\fP is unset, committer name to this value\.
 .TP
 \fBHOMEBREW_GIT_PATH\fP
-Linux only: Set this value to a new enough \fBgit\fP executable for Homebrew to use\.
-.RS
-.P
-\fIDefault:\fP \fBgit\fP\&\.
-.RE
+Suggest a \fBgit\fP executable for Homebrew to use\. Homebrew may prefer another executable for security or reliability\.
 .TP
 \fBHOMEBREW_INSTALL_BADGE\fP
 Print this text before the installation summary of each successful build\.
@@ -3294,11 +3286,7 @@ If set, Homebrew will use the given config file instead of \fB~/\.ssh/config\fP 
 If set, Homebrew will use the \fB$SUDO_USER\fP environment variable to define the user to \fBsudo\fP(8) through when running \fBsudo\fP(8)\.
 .TP
 \fBHOMEBREW_SVN\fP
-Use this as the \fBsvn\fP(1) binary\.
-.RS
-.P
-\fIDefault:\fP A Homebrew\-built Subversion (if installed), or the system\-provided binary\.
-.RE
+Suggest an \fBsvn\fP(1) executable for Homebrew to use\. Homebrew may prefer another executable for security or reliability\.
 .TP
 \fBHOMEBREW_SYSTEM_ENV_TAKES_PRIORITY\fP
 If set in Homebrew\[u2019]s system\-wide environment file (\fB/etc/homebrew/brew\.env\fP), the system\-wide environment file will be loaded last to override any prefix or user settings\.

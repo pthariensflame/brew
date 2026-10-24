@@ -23,6 +23,30 @@ RSpec.describe GitDownloadStrategy do
     end
   end
 
+  describe "tool selection after a failed download" do
+    subject(:strategy) do
+      Class.new(described_class) do
+        T.bind(self, T.class_of(GitDownloadStrategy))
+        public :git_download_command!
+      end.new(url, name, version)
+    end
+
+    let(:selection_cache) { HOMEBREW_CACHE/"tool-selection/git" }
+    let(:error) { ErrorDuringExecution.new(["git", "fetch"], status: 128) }
+
+    before do
+      selection_cache.dirname.mkpath
+      selection_cache.write "cached selection"
+      allow(strategy).to receive(:env).and_return({})
+      allow(strategy).to receive(:system_command!).and_raise(error)
+    end
+
+    it "preserves the selection and original download error" do
+      expect { strategy.git_download_command!(args: ["fetch"]) }
+        .to raise_error(error) { expect(selection_cache).to exist }
+    end
+  end
+
   describe "#fetch" do
     it "aborts the download if Git cannot be installed" do
       allow(Utils::Git).to receive(:ensure_installed!).and_raise("Git installation failed")

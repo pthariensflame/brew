@@ -32,6 +32,10 @@ module Utils
         stdout, _, status = system_command(git, args: ["--version"], env: no_global_config_env,
                                                 verbose: false, print_stderr: false).to_a
         version_str = stdout.chomp[/git version (\d+(?:\.\d+)*)/, 1] if status.success?
+        if version_str.nil?
+          require "utils/tool"
+          Utils::Tool.invalidate_cache(:git)
+        end
         version_str.nil? ? Version::NULL : Version.new(version_str)
       end, T.nilable(Version))
     end
@@ -173,6 +177,7 @@ module Utils
 
           require "formula"
           Formula["git"].ensure_installed!
+          ENV["HOMEBREW_GIT"] = (HOMEBREW_PREFIX/"opt/git/bin/git").to_s
           clear_available_cache
         rescue
           raise "Git is unavailable"

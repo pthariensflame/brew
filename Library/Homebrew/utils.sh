@@ -1,6 +1,7 @@
 # These variables are set from the user environment.
 # shellcheck disable=SC2154
 source "${HOMEBREW_LIBRARY}/Homebrew/utils/formatter.sh"
+source "${HOMEBREW_LIBRARY}/Homebrew/utils/tool.sh"
 
 # Keep in sync with Utils::Output#ohai in Library/Homebrew/utils/output.rb.
 ohai() {

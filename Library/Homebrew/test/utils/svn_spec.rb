@@ -32,6 +32,18 @@ RSpec.describe Utils::Svn do
   end
 
   describe "::version" do
+    test_each([true, false]) do |success|
+      it "invalidates selection after an invalid version probe (success: #{success})" do
+        selection_cache = HOMEBREW_CACHE/"tool-selection/svn"
+        selection_cache.dirname.mkpath
+        selection_cache.write "cached selection"
+        stdout = success ? "invalid version" : "svn, version 1.14.5"
+        allow(described_class).to receive(:system_command).and_return(svn_result(stdout, success:))
+
+        expect([described_class.version, selection_cache.exist?]).to eq([nil, false])
+      end
+    end
+
     it "returns svn version or nil" do
       expect(described_class).to receive(:system_command)
         .with(HOMEBREW_SHIMS_PATH/"shared/svn", args: ["--version"], print_stderr: false)
