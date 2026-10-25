@@ -181,7 +181,7 @@ module Homebrew::EnvConfig
     sig { returns(String) }
     def core_git_remote; end
 
-    sig { returns(String) }
+    sig { returns(T.nilable(::String)) }
     def curl_path; end
 
     sig { returns(String) }
@@ -298,7 +298,7 @@ module Homebrew::EnvConfig
     sig { returns(T.nilable(::String)) }
     def git_name; end
 
-    sig { returns(String) }
+    sig { returns(T.nilable(::String)) }
     def git_path; end
 
     sig { returns(T.nilable(::String)) }
