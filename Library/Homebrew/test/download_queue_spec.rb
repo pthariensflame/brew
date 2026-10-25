@@ -134,7 +134,7 @@ RSpec.describe Homebrew::DownloadQueue do
     # The reported checksum comes from the failed verification rather than
     # rehashing the file, which the report itself has already removed.
     expect { download_queue.fetch }
-      .to output(/reports different checksum: +#{"aa" * 32}/).to_stderr
+      .to output(/Bottle testball reports different checksum: +#{"aa" * 32}/).to_stderr
       .and output(/checksum of downloaded file: +#{"bb" * 32}/).to_stdout
     expect(download_queue.failed_downloads).to eq([downloadable])
     expect(cached_download).not_to exist
@@ -150,7 +150,9 @@ RSpec.describe Homebrew::DownloadQueue do
 
     download_queue.enqueue(downloadable)
 
-    expect { download_queue.fetch }.to output(/reports different checksum/).to_stderr
+    expect { download_queue.fetch }
+      .to output(/Bottle testball reports different checksum: +#{"aa" * 32}/).to_stderr
+      .and output(/checksum of downloaded file: +#{"bb" * 32}/).to_stdout
     expect(download_queue.failed_downloads).to eq([downloadable])
     expect(cached_download).not_to exist
     expect(Homebrew).to have_failed
