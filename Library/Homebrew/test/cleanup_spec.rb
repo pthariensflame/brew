@@ -238,7 +238,7 @@ RSpec.describe Homebrew::Cleanup do
       cache_file.write "cached"
       (HOMEBREW_CELLAR/"untrusted/1.0").mkpath
 
-      expect(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"untrusted")
+      expect(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"untrusted", from_cache: true)
                                               .and_raise(Homebrew::UntrustedTapError)
 
       expect { cleanup.cleanup_cache([{ path: cache_file, type: nil }]) }
@@ -953,6 +953,83 @@ RSpec.describe Homebrew::Cleanup do
       expect(source_file).not_to exist
     end
 
+    context "with formula cache names", :no_api do
+      def cleanup_cache_file(cache_file, dry_run:)
+        described_class.new(dry_run:).cleanup_cache([{ path: cache_file, type: nil }], cleanup_unreferenced: false)
+      end
+
+      test_each([false, true].product(%w[
+        ..--1.0.tar.gz .--1.0.tar.gz
+        .._bottle_manifest--1.0.bottle_manifest.json ._bottle_manifest--1.0.bottle_manifest.json
+      ])) do |(dry_run, name)|
+        it "keeps #{name} with dry_run=#{dry_run}" do
+          cache_file = HOMEBREW_CACHE/name
+          (HOMEBREW_CELLAR/"invalid-dot-rack").mkpath
+          FileUtils.touch cache_file
+
+          expect { cleanup_cache_file(cache_file, dry_run:) }.not_to change(cache_file, :exist?)
+        end
+      end
+
+      test_each([false, true]) do |dry_run|
+        it "does not load a local bottle from a cache name with dry_run=#{dry_run}" do
+          fixture_dir = mktmpdir
+          bottle_name = "cache_name.arm64_sonoma.bottle.tar.gz"
+          FileUtils.touch fixture_dir/bottle_name
+          cache_file = HOMEBREW_CACHE/"#{bottle_name}--1.0.tar.gz"
+          FileUtils.touch cache_file
+
+          expect(Formulary::FromBottleLoader).not_to receive(:try_new)
+          Dir.chdir(fixture_dir) { cleanup_cache_file(cache_file, dry_run:) }
+        end
+      end
+
+      context "when a local formula has the cache name" do
+        let(:fixture_dir) { mktmpdir }
+        let(:marker) { fixture_dir/"evaluated" }
+
+        before do
+          (fixture_dir/"cache-name.rb").write <<~RUBY
+            File.write(#{marker.to_s.inspect}, "evaluated")
+            class CacheName < Formula
+              url "https://example.com/cache-name-1.0.tar.gz"
+              sha256 "#{"0" * 64}"
+            end
+          RUBY
+        end
+
+        test_each([false, true]) do |dry_run|
+          it "does not evaluate a local formula with dry_run=#{dry_run}" do
+            cache_file = HOMEBREW_CACHE/"cache-name.rb--1.0.tar.gz"
+            FileUtils.touch cache_file
+
+            Dir.chdir(fixture_dir) do
+              expect { cleanup_cache_file(cache_file, dry_run:) }.not_to change(marker, :exist?)
+            end
+          end
+
+          it "does not evaluate a local formula through a bottle manifest with dry_run=#{dry_run}" do
+            cache_file = HOMEBREW_CACHE/"cache-name.rb_bottle_manifest--1.0.bottle_manifest.json"
+            FileUtils.touch cache_file
+
+            Dir.chdir(fixture_dir) do
+              expect { cleanup_cache_file(cache_file, dry_run:) }.not_to change(marker, :exist?)
+            end
+          end
+
+          it "does not evaluate a local formula through an installed keg with dry_run=#{dry_run}" do
+            (HOMEBREW_CELLAR/"cache-name.rb/1.0").mkpath
+            cache_file = HOMEBREW_CACHE/"cache-name.rb--1.0.tar.gz"
+            FileUtils.touch cache_file
+
+            Dir.chdir(fixture_dir) do
+              expect { cleanup_cache_file(cache_file, dry_run:) }.not_to change(marker, :exist?)
+            end
+          end
+        end
+      end
+    end
+
     context "when cleaning old files in HOMEBREW_CACHE" do
       let(:bottle) { HOMEBREW_CACHE/"testball--0.0.1.tag.bottle.tar.gz" }
       let(:testball) { HOMEBREW_CACHE/"testball--0.0.1" }
@@ -1002,10 +1079,12 @@ RSpec.describe Homebrew::Cleanup do
       end
 
       it "does not remove the file when bottle resource version is nil" do
-        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball_bottle_manifest").and_return(nil)
+        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball_bottle_manifest", from_cache: true)
+                                               .and_return(nil)
         allow(Formulary).to receive(:from_rack).and_call_original
-        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball").and_wrap_original do |m, *args|
-          formula = m.call(*args)
+        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball", from_cache: true)
+                                               .and_wrap_original do |m, *args, **kwargs|
+          formula = m.call(*args, **kwargs)
           if formula
             bottle_nil_version = instance_double(Bottle,
                                                  resource: instance_double(Resource, version: nil),
@@ -1021,10 +1100,12 @@ RSpec.describe Homebrew::Cleanup do
       it "removes the file when path version differs from bottle version_rebuild" do
         pathname_mismatch = (HOMEBREW_CACHE/"testball_bottle_manifest--2.0.bottle_manifest.json")
         FileUtils.touch pathname_mismatch
-        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball_bottle_manifest").and_return(nil)
+        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball_bottle_manifest", from_cache: true)
+                                               .and_return(nil)
         allow(Formulary).to receive(:from_rack).and_call_original
-        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball").and_wrap_original do |m, *args|
-          formula = m.call(*args)
+        allow(Formulary).to receive(:from_rack).with(HOMEBREW_CELLAR/"testball", from_cache: true)
+                                               .and_wrap_original do |m, *args, **kwargs|
+          formula = m.call(*args, **kwargs)
           if formula
             bottle_double = instance_double(Bottle,
                                             resource: instance_double(Resource, version: Version.new("1.0")),

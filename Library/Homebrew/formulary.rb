@@ -1042,6 +1042,7 @@ module Formulary
   # @param alias_path will be used if the formula is found not to be
   #   installed and discarded if it is installed because the `alias_path` used
   #   to install the formula will be set instead.
+  # @param from_cache restrict formula lookup to name-based loaders for cache cleanup.
   sig {
     params(
       rack:         Pathname,
@@ -1050,14 +1051,17 @@ module Formulary
       alias_path:   T.nilable(T.any(Pathname, String)),
       force_bottle: T::Boolean,
       flags:        T::Array[String],
+      from_cache:   T::Boolean,
       keg:          T.nilable(Keg),
     ).returns(Formula)
   }
-  def self.from_rack(rack, spec = nil, alias_path: nil, force_bottle: false, flags: [], keg: Keg.from_rack(rack))
+  def self.from_rack(rack, spec = nil, alias_path: nil, force_bottle: false, flags: [], from_cache: false,
+                     keg: Keg.from_rack(rack))
     if keg
-      from_keg(keg, spec, alias_path:, force_bottle:, flags:)
+      from_keg(keg, spec, alias_path:, force_bottle:, flags:, from_cache:)
     else
-      factory(rack.basename.to_s, spec || :stable, alias_path:, from: :rack, warn: false, force_bottle:, flags:)
+      factory(rack.basename.to_s, spec || :stable, alias_path:, from: from_cache ? :cleanup : :rack,
+              warn: false, force_bottle:, flags:)
     end
   end
 
@@ -1070,6 +1074,7 @@ module Formulary
   end
 
   # Return a {Formula} instance for the given keg.
+  # @param from_cache restrict formula lookup to name-based loaders for cache cleanup.
   sig {
     params(
       keg:          Keg,
@@ -1078,6 +1083,7 @@ module Formulary
       alias_path:   T.nilable(T.any(Pathname, String)),
       force_bottle: T::Boolean,
       flags:        T::Array[String],
+      from_cache:   T::Boolean,
     ).returns(Formula)
   }
   def self.from_keg(
@@ -1085,22 +1091,24 @@ module Formulary
     spec = nil,
     alias_path: nil,
     force_bottle: false,
-    flags: []
+    flags: [],
+    from_cache: false
   )
     tab = keg.tab
     tap = tab.tap
     spec ||= tab.spec
 
     formula_name = keg.rack.basename.to_s
+    from = from_cache ? :cleanup : :keg
 
     f = if tap.nil?
-      factory(formula_name, spec, alias_path:, from: :keg, warn: false, force_bottle:, flags:)
+      factory(formula_name, spec, alias_path:, from:, warn: false, force_bottle:, flags:)
     else
       begin
-        factory("#{tap}/#{formula_name}", spec, alias_path:, from: :keg, warn: false, force_bottle:, flags:)
+        factory("#{tap}/#{formula_name}", spec, alias_path:, from:, warn: false, force_bottle:, flags:)
       rescue FormulaUnavailableError
         # formula may be migrated to different tap. Try to search in core and all taps.
-        factory(formula_name, spec, alias_path:, from: :keg, warn: false, force_bottle:, flags:)
+        factory(formula_name, spec, alias_path:, from:, warn: false, force_bottle:, flags:)
       end
     end
     f.build = tab
@@ -1237,7 +1245,7 @@ module Formulary
 
   sig { params(ref: T.any(String, Pathname), from: T.nilable(Symbol), warn: T::Boolean).returns(FormulaLoader) }
   def self.loader_for(ref, from: nil, warn: true)
-    [
+    loader_classes = [
       FromBottleLoader,
       FromURILoader,
       FromAPILoader,
@@ -1245,7 +1253,9 @@ module Formulary
       FromPathLoader,
       FromNameLoader,
       FromKegLoader,
-    ].each do |loader_class|
+    ]
+    loader_classes -= [FromBottleLoader, FromURILoader, FromPathLoader] if from == :cleanup
+    loader_classes.each do |loader_class|
       if (loader = loader_class.try_new(ref, from:, warn:))
         $stderr.puts "#{$PROGRAM_NAME} (#{loader_class}): loading #{ref}" if verbose? && debug?
         return loader
