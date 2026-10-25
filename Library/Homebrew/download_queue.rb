@@ -165,7 +165,9 @@ module Homebrew
           end
 
           @failed_downloads << downloadable
-          ofail "#{downloadable.download_queue_type} reports different checksum: #{e.expected}"
+          actual_message, expected_message = align_checksum_mismatch_message(downloadable.download_queue_message)
+          ofail "#{actual_message} #{e.expected}"
+          puts "#{expected_message} #{e.actual}"
           # Remove the known-bad download so it can never be staged later.
           unlink_cached_download(downloadable)
         rescue
@@ -216,7 +218,8 @@ module Homebrew
             elsif future.rejected?
               if exception.is_a?(ChecksumMismatchError)
                 @failed_downloads << downloadable
-                actual_message, expected_message = align_checksum_mismatch_message(downloadable.download_queue_type)
+                actual_message, expected_message =
+                  align_checksum_mismatch_message(downloadable.download_queue_message)
 
                 report_or_defer_failure do
                   ofail "#{actual_message} #{exception.expected}"
@@ -494,9 +497,9 @@ module Homebrew
       end
     end
 
-    sig { params(downloadable_type: String).returns([String, String]) }
-    def align_checksum_mismatch_message(downloadable_type)
-      actual_checksum_output = "#{downloadable_type} reports different checksum:"
+    sig { params(downloadable_message: String).returns([String, String]) }
+    def align_checksum_mismatch_message(downloadable_message)
+      actual_checksum_output = "#{downloadable_message} reports different checksum:"
       expected_checksum_output = "SHA-256 checksum of downloaded file:"
 
       # `.max` returns `T.nilable(Integer)`, use `|| 0` to pass the typecheck
