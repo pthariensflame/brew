@@ -85,6 +85,8 @@ brew as-brew-user install wget
 ```
 
 The command uses the owner's home and a clean environment, switching accounts through sudo when necessary.
+It preserves the caller's working directory, so relative paths resolve as usual.
+The owner must have access to the working directory and any files used by the command.
 When sudo is disabled or unavailable, an already-root process switches through macOS `login` or Linux `runuser` instead.
 These commands use the selected account's primary and supplementary groups.
 Without permission to switch accounts, log in as the owner instead.
@@ -102,6 +104,7 @@ brew as-console-user install wget
 ```
 
 The command uses that user's home and a clean environment.
+Like `as-brew-user`, it preserves the caller's working directory, which the selected user must be able to access.
 An already-root process can switch users even when sudo is disabled or unavailable, using the same fallback as `as-brew-user`.
 Other accounts need sudo access to switch users.
 It fails if no supported console user is logged in.

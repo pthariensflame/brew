@@ -266,7 +266,7 @@ RSpec.describe Homebrew::Cmd::AsConsoleUser do
     expect(stdout).to be_empty
     expect(stderr).to be_empty
     expect(args_file.read).to eq <<~EOS
-      cwd=#{console_home}
+      cwd=#{Dir.pwd}
       -H
       -u
       mike
@@ -275,7 +275,7 @@ RSpec.describe Homebrew::Cmd::AsConsoleUser do
       HOME=#{console_home}
       USER=mike
       LOGNAME=mike
-      PWD=#{console_home}
+      PWD=#{Dir.pwd}
       PATH=/usr/bin:/bin:/usr/sbin:/sbin
       /opt/homebrew/bin/brew
       upgrade
