@@ -1,10 +1,13 @@
 ---
-last_review_date: "2026-06-19"
+last_review_date: "2026-10-25"
 ---
 
 # How to Create and Maintain a Tap
 
 [Taps](Taps.md) are external sources of Homebrew formulae, casks and/or external commands. They can be created by anyone to provide their own formulae, casks and/or external commands to any Homebrew user.
+
+For private repositories used by teams, see [internal software delivery and unattended credentials](Homebrew-Fleet-Management.md#publish-internal-tools-through-private-taps).
+Apply [tap trust and package policies](Homebrew-Package-Policies.md) when deploying the tap across devices.
 
 ## Creating a tap
 

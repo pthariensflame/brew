@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-10-09"
+last_review_date: "2026-10-25"
 ---
 
 # Advisory Matching
@@ -7,6 +7,8 @@ last_review_date: "2026-10-09"
 `brew advisory-match` prepares candidate records for the [Homebrew advisory database](https://github.com/Homebrew/advisory-database).
 It is an authoring tool, not the installed-package scanner provided by `brew vulns`.
 Candidates still need [human review](https://github.com/Homebrew/advisory-database/blob/HEAD/CONTRIBUTING.md#reviewing-matched-candidates) before publication.
+
+For operational scanning and remediation, see [Homebrew vulnerability management](Homebrew-Vulnerability-Management.md).
 
 ## Range accuracy and coverage
 

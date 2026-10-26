@@ -1,5 +1,6 @@
 ---
-last_review_date: "2026-07-18"
+description: Use Homebrew Bundle and Brewfiles to install project dependencies, check software requirements and manage packages on macOS and Linux.
+last_review_date: "2026-10-25"
 ---
 
 # Homebrew Bundle, `brew bundle` and `Brewfile`
@@ -117,6 +118,11 @@ Homebrew is installed by default on GitHub-hosted macOS runners and can be insta
 
 See [GitHub's "Scripts To Rule Them All" `script/bootstrap` example](https://github.com/github/scripts-to-rule-them-all/blob/HEAD/script/bootstrap)
 for how you might use a `Brewfile` and `brew bundle` to install project dependencies with Homebrew.
+
+### Homebrew for teams at work
+
+For a shared Brewfile maintained in Git, follow [Homebrew for Teams](Homebrew-for-Teams.md).
+The guide covers onboarding colleagues, reviewing changes, coordinating updates and keeping personal tools alongside the team's baseline without an MDM.
 
 ### `brew bundle dump`
 

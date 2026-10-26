@@ -1,5 +1,5 @@
 ---
-last_review_date: "2025-02-08"
+last_review_date: "2026-10-25"
 ---
 
 # Querying `brew`
@@ -22,9 +22,15 @@ The default schema version is `v1`, which returns info about formulae; specify `
 
 The schema itself is not currently documented outside of the code in [`formula.rb`](https://github.com/Homebrew/brew/blob/2e6b6ab3a20da503ba2a22a37fdd6bd936d818ed/Library/Homebrew/formula.rb#L1922-L2017) that generates it.
 
+## Fleet inventory and security reporting
+
+Use `brew info --json=v2 --installed` for formula and cask inventory, including each installed formula keg's `sbom` path (`null` when missing).
+See the [inventory guide](Homebrew-Inventory-and-SBOM.md) for installed-version fields, CSV exports and SBOM collection.
+Use `brew outdated --vulnerable --json=v2` for upgrade candidates and `brew vulns --json` for findings and coverage; see [vulnerability management](Homebrew-Vulnerability-Management.md).
+
 ## Examples
 
-_The top-level element of the JSON output is always an array, so the `map` operator is used to act on the data._
+_The following `v1` examples return an array, so the `map` operator is used to act on the data._
 
 ### Pretty-print a single formula's info
 

@@ -4440,6 +4440,12 @@ prefix-specific files take precedence over system-wide files (unless
 Note that these files do not support shell variable expansion (e.g. `$HOME`) or
 command execution (e.g. `$(cat file)`).
 
+For MDM configuration, package restrictions and policy ownership, see:
+
+[Homebrew for Mac Admins][1]
+
+[Homebrew Package Policies][2]
+
 `HOMEBREW_API_AUTO_UPDATE_SECS`
 
 : Check Homebrew's API for new formulae or cask data every
@@ -5208,6 +5214,8 @@ Homebrew Documentation: <https://docs.brew.sh>
 
 Homebrew API: <https://docs.brew.sh/rubydoc/>
 
+[Homebrew for teams at work][3]
+
 `git`(1), `git-log`(1)
 
 ## AUTHORS
@@ -5239,3 +5247,8 @@ See our issues on GitHub:
 
 : <https://github.com/Homebrew/homebrew-cask/issues>
 
+
+
+[1]: https://docs.brew.sh/Homebrew-for-Mac-Admins
+[2]: https://docs.brew.sh/Homebrew-Package-Policies
+[3]: https://docs.brew.sh/Homebrew-for-Teams

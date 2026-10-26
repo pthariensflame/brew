@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-04-05"
+last_review_date: "2026-10-25"
 ---
 
 # Formulae Versions
@@ -33,6 +33,9 @@ Versioned formulae we include in [homebrew/core](https://github.com/homebrew/hom
 ## Locking installed formulae at specific versions
 
 Homebrew's versions should not be used to "pin" formulae to your personal requirements. If a versioned formula already exists in `homebrew/core`, prefer that first: it remains supported and updated by Homebrew.
+
+For fleet policy thresholds, use `brew outdated --minimum-version` and `brew upgrade --minimum-version`; for vulnerability-based selection, use `--vulnerable`.
+See [patch management](Homebrew-Vulnerability-Management.md#apply-and-verify-updates) for previews, pins and verification.
 
 If you want something else, choose the smallest tool that fits:
 

@@ -1,10 +1,13 @@
 ---
-last_review_date: "2026-07-18"
+last_review_date: "2026-10-25"
 ---
 
 # Bottles (Binary Packages)
 
 Bottles are produced by installing a formula with `brew install --build-bottle <formula>` and then bottling it with `brew bottle <formula>`. This generates a bottle file in the current directory and outputs the bottle DSL for insertion into the formula file.
+
+For private bottle distribution across a team, see [internal software delivery](Homebrew-Fleet-Management.md#publish-internal-tools-through-private-taps) and [download mirror policy](Homebrew-Package-Policies.md#use-mirrors-without-weakening-verification).
+For installed build evidence, see [SBOM discovery and collection](Homebrew-Inventory-and-SBOM.md#collect-formula-software-bills-of-materials).
 
 ## Usage
 

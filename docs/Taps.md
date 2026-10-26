@@ -1,5 +1,5 @@
 ---
-last_review_date: "2026-07-18"
+last_review_date: "2026-10-25"
 ---
 
 # Taps (Third-Party Repositories)
@@ -9,6 +9,8 @@ The one-argument form assumes a repository on GitHub, while the two-argument for
 
 Code in a tap can run with your user's privileges.
 Read [Tap Trust](Tap-Trust.md) before using a non-official tap.
+
+For distributing internal software at work, see [private taps in a managed fleet](Homebrew-Fleet-Management.md#publish-internal-tools-through-private-taps) and [package source policies](Homebrew-Package-Policies.md#separate-tap-trust-from-package-approval).
 
 ## The `brew tap` command
 
