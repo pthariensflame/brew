@@ -120,7 +120,15 @@ export HOMEBREW_CORE_GIT_REMOTE="..."  # put your Git mirror of Homebrew/homebre
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-The default Git remote will be used if the corresponding environment variable is unset and works best for most users.
+During installation, the default Git remote will be used if the corresponding environment variable is unset and works best for most users.
+After installation, `brew update` preserves the configured remotes when these variables are unset.
+To reset existing repositories to the default Git remotes, set the URLs explicitly:
+
+```bash
+HOMEBREW_BREW_GIT_REMOTE="https://github.com/Homebrew/brew" \
+HOMEBREW_CORE_GIT_REMOTE="https://github.com/Homebrew/homebrew-core" \
+  brew update
+```
 
 **Note:** if you set these variables you are granting these repositories the same level of trust you currently grant to Homebrew itself. You should be extremely confident that these repositories will not be compromised.
 
