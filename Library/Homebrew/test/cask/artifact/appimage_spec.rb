@@ -15,9 +15,14 @@ RSpec.describe Cask::Artifact::AppImage, :cask do
   let(:install_phase) { artifact.install_phase(command:, adopt:, force:, auto_updates:) }
   let(:uninstall_phase) { artifact.uninstall_phase(command:, force:) }
 
+  let(:desktop_entry) { xdg_data_home/"applications/naked.desktop" }
+  let(:desktop_entry_link) { cask.staged_path/"naked.desktop" }
+  let(:xdg_data_home) { mktmpdir }
+
   let(:setup_cask) { InstallHelper.install_without_artifacts(cask) }
 
   before do
+    ENV["HOMEBREW_XDG_DATA_HOME"] = xdg_data_home.to_s
     setup_cask
   end
 
@@ -38,6 +43,113 @@ RSpec.describe Cask::Artifact::AppImage, :cask do
       install_phase
 
       expect(target_path).to be_executable
+    end
+
+    it "installs the embedded desktop entry, pointing it at the AppImage and its icon" do
+      install_phase
+
+      expect(desktop_entry_link.readlink).to eq(desktop_entry)
+      expect(cask.staged_path/"naked.png").to be_a_file
+      expect(desktop_entry.read).to eq <<~EOS
+        [Desktop Entry]
+        Type=Application
+        Name=Naked
+        Exec=env DESKTOPINTEGRATION=1 #{target_path} --flag %U
+        TryExec=#{target_path}
+        Icon=#{cask.staged_path}/naked.png
+        MimeType=x-scheme-handler/naked;
+        Actions=new;
+
+        [Desktop Action new]
+        Name=New
+        Exec=env DESKTOPINTEGRATION=1 #{target_path} --new
+      EOS
+    end
+
+    describe "when the desktop entry has MIME types" do
+      let(:desktop_entry_dir) { xdg_data_home/"applications" }
+      let(:update_desktop_database) { Pathname("/usr/bin/update-desktop-database") }
+
+      before do
+        desktop_entry_dir.mkpath
+        (desktop_entry_dir/"mimeinfo.cache").write("[MIME Cache]\n")
+        allow(artifact).to receive(:which).with("update-desktop-database").and_return(update_desktop_database)
+        allow(command).to receive(:run).and_call_original
+      end
+
+      it "rebuilds an existing mimetype cache" do
+        expect(command).to receive(:run).with(update_desktop_database, args: [desktop_entry_dir], print_stderr: false)
+        install_phase
+      end
+    end
+
+    describe "when the AppImage has several root-level `.desktop` files" do
+      let(:installed_desktop_entries) { (xdg_data_home/"applications").children.map { |path| path.basename.to_s } }
+
+      before { ENV["NAKED_DESKTOP_ENTRIES"] = "multiple" }
+
+      it "installs only those that are desktop entries" do
+        install_phase
+
+        expect(installed_desktop_entries).to contain_exactly("naked.desktop.desktop", "naked-tools.desktop")
+      end
+    end
+
+    describe "when the desktop entry's icon is not at the root of the AppImage" do
+      before { ENV["NAKED_ICON"] = "missing" }
+
+      it "uses the AppImage's extensionless `.DirIcon`, typed by its contents" do
+        install_phase
+
+        expect((cask.staged_path/"naked.png").binread).to eq("\x89PNG\r\n".b)
+      end
+    end
+
+    describe "when a desktop entry already exists" do
+      before do
+        desktop_entry.dirname.mkpath
+        desktop_entry.write("[Desktop Entry]\n")
+      end
+
+      it "refuses to overwrite it before moving the AppImage" do
+        expect { install_phase }.to raise_error(Cask::CaskError, /already a desktop entry/)
+        expect(target_path).not_to exist
+      end
+
+      describe "given the force option" do
+        let(:force) { true }
+
+        it "overwrites it" do
+          install_phase
+
+          expect(desktop_entry.read).to include("Name=Naked")
+        end
+
+        describe "when another cask links to it" do
+          let(:other_desktop_entry_link) { Cask::Caskroom.path/"other-cask/1.0/naked.desktop" }
+
+          before do
+            other_desktop_entry_link.dirname.mkpath
+            FileUtils.ln_s desktop_entry, other_desktop_entry_link
+          end
+
+          it "takes it over from that cask" do
+            install_phase
+
+            expect(other_desktop_entry_link).not_to be_a_symlink
+          end
+        end
+      end
+
+      describe "during an upgrade" do
+        let(:install_phase) { artifact.install_phase(command:, predecessor: cask) }
+
+        it "overwrites it" do
+          install_phase
+
+          expect(desktop_entry.read).to include("Name=Naked")
+        end
+      end
     end
 
     describe "when a self-updater replaces the target in place" do
@@ -94,6 +206,37 @@ RSpec.describe Cask::Artifact::AppImage, :cask do
       uninstall_phase
 
       expect(target_path).not_to exist
+    end
+
+    describe "when the removed desktop entry has MIME types" do
+      let(:update_desktop_database) { Pathname("/usr/bin/update-desktop-database") }
+
+      before do
+        install_phase
+        allow(artifact).to receive(:which).with("update-desktop-database").and_return(update_desktop_database)
+        allow(command).to receive(:run).and_call_original
+      end
+
+      it "rebuilds an existing mimetype cache" do
+        (desktop_entry.dirname/"mimeinfo.cache").write("[MIME Cache]\n")
+
+        expect(command).to receive(:run)
+          .with(update_desktop_database, args: [desktop_entry.dirname], print_stderr: false)
+        uninstall_phase
+      end
+
+      it "doesn't create a mimetype cache" do
+        expect(command).not_to receive(:run).with(update_desktop_database, anything)
+        uninstall_phase
+      end
+    end
+
+    it "removes every linked desktop entry" do
+      ENV["NAKED_DESKTOP_ENTRIES"] = "multiple"
+      install_phase
+      uninstall_phase
+
+      expect((xdg_data_home/"applications").children).to be_empty
     end
 
     describe "migrating from the old Symlinked layout" do
