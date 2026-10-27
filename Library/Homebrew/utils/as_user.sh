@@ -78,24 +78,12 @@ homebrew-as-user() {
     fi
   fi
 
-  (
-    if [[ "${command_name}" == as-brew-user ]]
-    then
-      # Expand HOME only after switching to the prefix owner.
-      # shellcheck disable=SC2016
-      set -- /bin/bash -c 'cd -- "$HOME" && exec "$@"' -- "${HOMEBREW_BREW_FILE}" "$@"
-    else
-      cd "${selected_home}" &>/dev/null || odie "Failed to cd to ${selected_home}!"
-      set -- "${HOMEBREW_BREW_FILE}" "$@"
-    fi
-
-    "${user_command[@]}" /usr/bin/env -i \
-      "HOME=${selected_home}" \
-      "USER=${selected_user}" \
-      "LOGNAME=${selected_user}" \
-      "PWD=${selected_home}" \
-      "PATH=/usr/bin:/bin:/usr/sbin:/sbin" \
-      ${HOMEBREW_NO_SUDO:+"HOMEBREW_NO_SUDO=${HOMEBREW_NO_SUDO}"} \
-      "$@"
-  )
+  "${user_command[@]}" /usr/bin/env -i \
+    "HOME=${selected_home}" \
+    "USER=${selected_user}" \
+    "LOGNAME=${selected_user}" \
+    "PWD=${PWD}" \
+    "PATH=/usr/bin:/bin:/usr/sbin:/sbin" \
+    ${HOMEBREW_NO_SUDO:+"HOMEBREW_NO_SUDO=${HOMEBREW_NO_SUDO}"} \
+    "${HOMEBREW_BREW_FILE}" "$@"
 }

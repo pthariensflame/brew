@@ -74,7 +74,7 @@ RSpec.shared_examples "switching users without sudo" do |command_name = nil|
     stdout, stderr, status = result
 
     expect([stdout.lines(chomp: true), stderr, status.exitstatus]).to eq([
-      ["brewer", test_root.to_s, test_root.to_s, "1", "unset",
+      ["brewer", test_root.to_s, Dir.pwd, "1", "unset",
        "list", "argument with spaces", "", '$(exit 1); * "quotes"'],
       "", 42
     ])
