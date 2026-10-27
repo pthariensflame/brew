@@ -51,6 +51,62 @@ RSpec.describe Homebrew::Cmd::Update do
     expect([status.success?, stdout]).to eq([false, ""])
   end
 
+  test_each([
+    ["explicit brew default", "HOMEBREW_BREW_GIT_REMOTE", "https://github.com/Homebrew/brew", "mirror/core"],
+    ["explicit core default", "HOMEBREW_CORE_GIT_REMOTE", "mirror/brew", "https://github.com/Homebrew/homebrew-core"],
+    ["implicit defaults", "", "mirror/brew", "mirror/core"],
+    ["non-default remotes", "", "other/brew", "other/homebrew-core"],
+  ].product(["", "--auto-update"])) do |(description, user_set_vars, brew_remote, core_remote), option|
+    it "honours #{description} during update #{option}" do
+      setup_update_utils
+      FileUtils.ln_s repository_root/"Library/Homebrew/shims", test_root/"Library/Homebrew/shims"
+      (test_root/"core").mkpath
+      remote_base = (description == "non-default remotes") ? "other" : "https://github.com/Homebrew"
+
+      _stdout, stderr, status = run_update_shell(
+        <<~SH,
+          source "#{update_script}"
+          git() {
+            case "$*" in
+              fetch*) return 0 ;;
+              "config --local --get remote.origin.url")
+                "#{Utils::Git.git}" -C "#{test_root}" remote get-url origin > "#{test_root}/remotes"
+                "#{Utils::Git.git}" -C "#{test_root}/core" remote get-url origin >> "#{test_root}/remotes"
+                exit
+                ;;
+            esac
+            "#{Utils::Git.git}" "$@"
+          }
+          for repository in "#{test_root}" "#{test_root}/core"
+          do
+            git -C "${repository}" init -q
+          done
+          git -C "#{test_root}" remote add origin mirror/brew
+          git -C "#{test_root}/core" remote add origin mirror/core
+          lock() { :; }
+          homebrew-update #{option}
+        SH
+        {
+          "HOMEBREW_BREW_DEFAULT_GIT_REMOTE"      => "https://github.com/Homebrew/brew",
+          "HOMEBREW_BREW_GIT_REMOTE"              => "#{remote_base}/brew",
+          "HOMEBREW_CORE_DEFAULT_GIT_REMOTE"      => "https://github.com/Homebrew/homebrew-core",
+          "HOMEBREW_CORE_GIT_REMOTE"              => "#{remote_base}/homebrew-core",
+          "HOMEBREW_CORE_REPOSITORY"              => (test_root/"core").to_s,
+          "HOMEBREW_FORCE_BREWED_CA_CERTIFICATES" => nil,
+          "HOMEBREW_FORCE_BREWED_CURL"            => nil,
+          "HOMEBREW_FORCE_BREWED_GIT"             => nil,
+          "HOMEBREW_LIBRARY"                      => (test_root/"Library").to_s,
+          "HOMEBREW_NO_INSTALL_FROM_API"          => "1",
+          "HOMEBREW_REPOSITORY"                   => test_root.to_s,
+          "HOMEBREW_USER_SET_VARS"                => user_set_vars,
+        },
+      )
+
+      expect([status.success?, (test_root/"remotes").read]).to eq([true, "#{brew_remote}\n#{core_remote}\n"]),
+                                                               stderr
+    end
+  end
+
   it "installs Git when the Git wrapper cannot find an executable" do
     setup_update_utils
     (test_root/"Library/Homebrew/shims/shared").mkpath
