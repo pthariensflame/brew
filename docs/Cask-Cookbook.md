@@ -639,6 +639,9 @@ Use `if_path_exists`, `unless_path_exists`, `on_macos` and `on_linux` blocks to 
 
 `run` does not evaluate a shell command string. It supports a literal `env:`, `stdin_path:`, `stdout_path:`, `chdir:` and `sudo:`. Standard output is hidden by default and standard error is printed; use `print_stdout: true` or `print_stderr: false` to change that behaviour. Failure aborts the installation or uninstallation; pass `must_succeed: false` when a non-zero exit status is expected and should be ignored, such as a cleanup command that cannot run when its dependency is absent. Nothing is written to `stdout_path:` when an ignored command fails. The complete steps block runs in an isolated Ruby subprocess without network or general home-directory access where Homebrew has an available sandbox. Pass `network_access: true` when a `run` command must access the network. The sandbox permits writes to declared step destinations, the caskroom, app directory, temporary and cache directories and Homebrew's link directories. Ruby file operations and system or cask-provided commands therefore share the same restrictions. Use `writable_paths:` with directory roots, and `writable_base:` for relative roots, when an opaque command needs another declared write location.
 
+On macOS, leading, unconditional `postflight_steps` requests for `0755` on regular files inside the cask's app may also be applied before moving it from staging, using the same sandbox.
+This requires literal `base: :appdir` paths and `recursive: false`; it avoids App Management denials without granting additional TCC access.
+
 `mkdir_p` grants write access to its target directory when the parent already exists, otherwise to the parent directory.
 `inreplace` and `change_dylib_id` retain file-specific write access for existing targets; missing targets grant access to their immediate parent directory so Linux sandbox preparation does not create directories at file paths.
 
