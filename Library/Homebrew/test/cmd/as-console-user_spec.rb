@@ -251,7 +251,10 @@ RSpec.describe Homebrew::Cmd::AsConsoleUser do
         source "#{as_console_user_script}"
         odie() { echo "Error: $*" >&2; exit 1; }
         stat() { printf 'mike\\n'; }
-        id() { printf 'mike:*:501:20::0:0:Mike:#{console_home}:/bin/zsh\\n'; }
+        id() {
+          [[ "$1" == -un ]] && { echo operator; return; }
+          printf 'mike:*:501:20::0:0:Mike:#{console_home}:/bin/zsh\\n'
+        }
         sudo() {
           printf 'cwd=%s\\n' "$PWD" > "#{args_file}"
           printf '%s\\n' "$@" >> "#{args_file}"
@@ -259,7 +262,7 @@ RSpec.describe Homebrew::Cmd::AsConsoleUser do
         }
         homebrew-as-console-user upgrade git --minimum-version=2.50.1
       SH
-      macos_env.merge("HOMEBREW_BREW_FILE" => "/opt/homebrew/bin/brew"),
+      macos_env.merge("HOMEBREW_BREW_FILE" => "/opt/homebrew/bin/brew", "HOMEBREW_SUDO_USER" => ""),
     )
 
     expect(status.exitstatus).to eq 42
@@ -277,6 +280,7 @@ RSpec.describe Homebrew::Cmd::AsConsoleUser do
       LOGNAME=mike
       PWD=#{Dir.pwd}
       PATH=/usr/bin:/bin:/usr/sbin:/sbin
+      SUDO_USER=operator
       /opt/homebrew/bin/brew
       upgrade
       git

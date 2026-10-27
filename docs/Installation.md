@@ -95,6 +95,24 @@ A root-owned prefix is rejected; directory ownership is not changed.
 User services, caches and personal configuration belong to the managing account.
 Run `brew doctor` as that account and check group permissions and access control lists before sharing the installation.
 
+#### Casks requiring sudo
+
+`as-brew-user` and `as-console-user` run Homebrew and its subsequent sudo calls as the selected account, including when installing or upgrading casks through `brew bundle`.
+By default, those sudo calls authenticate the selected account, even if a different account authenticated the initial user switch.
+
+`HOMEBREW_SUDO_THROUGH_SUDO_USER=1` makes Homebrew invoke sudo through the account recorded in `SUDO_USER` before running the privileged command with sudo.
+Both sudo calls must be permitted by sudoers, including their authentication requirements.
+The first still authenticates the selected account by default, so setting this variable alone does not resolve password failures.
+
+Both commands preserve this setting and the original sudo user, falling back to the calling account for sudo routing even when no account switch is needed.
+You can also enable the setting in the selected account's `brew.env`.
+For example, with the required sudoers policy already configured:
+
+```sh
+HOMEBREW_SUDO_THROUGH_SUDO_USER=1 brew as-brew-user bundle \
+  --file="$(realpath Brewfile)"
+```
+
 ### Running as the console user
 
 On macOS, MDM, Munki and Jamf workflows can run Homebrew as the active logged-in console user:

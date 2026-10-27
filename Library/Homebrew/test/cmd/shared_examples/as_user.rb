@@ -116,4 +116,33 @@ RSpec.shared_examples "switching users without sudo" do |command_name = nil|
 
     expect(stdout).to eq("-H -u brewer\n")
   end
+
+  it "preserves the sudo caller and optional routing setting" do
+    brew_file = test_root/"brew"
+    brew_file.write <<~SH
+      #!/bin/bash
+      printf '%s\\n' "$SUDO_USER|${HOMEBREW_SUDO_THROUGH_SUDO_USER-unset}|${INHERITED-unset}"
+    SH
+    brew_file.chmod(0755)
+
+    expect([["", "1"], ["original-user", "1"], ["", ""]].map do |sudo_user, sudo_setting|
+      run_as_user_shell(
+        <<~SH,
+          source "#{HOMEBREW_LIBRARY_PATH}/cmd/#{command_name}.sh"
+          stat() { echo brewer; }
+          id() {
+            [[ "$1" == -un ]] && { echo operator; return; }
+            printf 'brewer:*:503:1234::0:0:Brewer:#{test_root}:/bin/bash\\n'
+          }
+          getent() { printf 'brewer:x:503:1234:Brewer:#{test_root}:/bin/bash\\n'; }
+          sudo() { shift 3; "$@"; }
+          homebrew-#{command_name} bundle
+        SH
+        macos_env.merge("HOMEBREW_BREW_FILE"              => brew_file.to_s,
+                        "HOMEBREW_SUDO_USER"              => sudo_user,
+                        "HOMEBREW_SUDO_THROUGH_SUDO_USER" => sudo_setting,
+                        "INHERITED"                       => "discard-me"),
+      ).first
+    end).to eq(["operator|1|unset\n", "original-user|1|unset\n", "operator|unset|unset\n"])
+  end
 end

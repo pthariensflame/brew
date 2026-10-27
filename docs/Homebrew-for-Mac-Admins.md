@@ -182,7 +182,7 @@ Use `as-console-user` when the active console user is the intended managing acco
 It uses the same root-only fallback but fails if no supported console user is logged in.
 Neither command changes directory ownership or grants a standard account permission to switch to another account.
 
-Both commands discard inherited environment settings except `HOMEBREW_NO_SUDO` and the identity settings they initialise.
+Both commands discard inherited environment settings except `HOMEBREW_NO_SUDO`, `HOMEBREW_SUDO_THROUGH_SUDO_USER` and the identity settings they preserve or initialise.
 The nested `brew` command then loads its environment files for the selected account.
 Use those files for persistent management settings; exporting a variable in the MDM agent's environment generally does not pass it through the switch.
 
@@ -203,6 +203,8 @@ For security work, follow [vulnerability scanning and verified remediation](Home
 Serialise jobs on each prefix and retain their output and exit status; a successful upgrade alone does not verify remediation.
 
 ## Casks, services and shared destinations
+
+For casks requiring sudo under a dedicated owner, see [cask authentication and `HOMEBREW_SUDO_THROUGH_SUDO_USER`](Installation.md#casks-requiring-sudo).
 
 With `HOMEBREW_NO_SUDO=1`, casks requiring privileged installers, keyboard-layout cache changes or privileged install steps fail before installation.
 Set it in `brew.env` when you explicitly want to [disable Homebrew's sudo calls](Installation.md#running-without-sudo); Homebrew also detects when sudo is unavailable.
