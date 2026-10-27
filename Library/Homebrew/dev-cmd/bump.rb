@@ -216,10 +216,9 @@ module Homebrew
         params(
           formula_or_cask: T.any(Formula, Cask::Cask),
           repositories:    T::Array[T::Hash[String, T.untyped]],
-          name:            String,
         ).returns(VersionBumpInfo)
       }
-      def retrieve_versions_by_arch(formula_or_cask:, repositories:, name:)
+      def retrieve_versions_by_arch(formula_or_cask:, repositories:)
         is_cask_with_blocks = formula_or_cask.is_a?(Cask::Cask) && formula_or_cask.on_system_blocks_exist?
         type, version_name = if formula_or_cask.is_a?(Formula)
           [:formula, "formula version:"]
@@ -436,14 +435,10 @@ module Homebrew
           end
 
           if pull_request_version
-            duplicate_pull_requests = retrieve_pull_requests(
-              formula_or_cask,
-              name,
-              version: pull_request_version,
-            )
+            duplicate_pull_requests = retrieve_pull_requests(formula_or_cask, version: pull_request_version)
 
             open_bump_pull_requests = if duplicate_pull_requests.nil?
-              retrieve_pull_requests(formula_or_cask, name, state: "open")
+              retrieve_pull_requests(formula_or_cask, state: "open")
             end
           end
         end
@@ -473,9 +468,7 @@ module Homebrew
         ).void
       }
       def retrieve_and_display_info_and_open_pr(formula_or_cask, name, repositories, ambiguous_cask: false)
-        version_info = retrieve_versions_by_arch(formula_or_cask:,
-                                                 repositories:,
-                                                 name:)
+        version_info = retrieve_versions_by_arch(formula_or_cask:, repositories:)
 
         deprecated = version_info.deprecated
         multiple_versions = version_info.multiple_versions
@@ -911,14 +904,17 @@ module Homebrew
       sig {
         params(
           formula_or_cask: T.any(Formula, Cask::Cask),
-          name:            String,
           state:           T.nilable(String),
           version:         T.nilable(String),
         ).returns T.nilable(T.any(T::Array[String], String))
       }
-      def retrieve_pull_requests(formula_or_cask, name, state: nil, version: nil)
+      def retrieve_pull_requests(formula_or_cask, state: nil, version: nil)
         tap_remote_repo = formula_or_cask.tap&.remote_repository || formula_or_cask.tap&.full_name
         odie "unexpected nil tap remote repository" if tap_remote_repo.nil?
+
+        # Pull request titles use the short name and the search is already scoped
+        # to the tap's repository, so a fully-qualified name would never match.
+        name = Livecheck.package_or_resource_name(formula_or_cask)
 
         pull_requests = begin
           GitHub.fetch_pull_requests(name, tap_remote_repo, state:, version:)
