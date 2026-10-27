@@ -3,11 +3,16 @@
 
 require "bundle"
 require "bundle/dsl"
+require "bundle/dumper"
 require "bundle/extensions/uv"
 
 RSpec.describe Homebrew::Bundle::Uv do
-  let(:uv_tool_list_args) do
-    [Pathname("uv"), "tool", "list", "--show-with", "--show-extras", "--show-version-specifiers"]
+  def stub_tool_list(output)
+    allow(SystemCommand).to receive(:run!)
+      .with(Pathname("uv"),
+            args:         ["tool", "list", "--show-with", "--show-extras", "--show-version-specifiers"],
+            print_stderr: false)
+      .and_return(instance_double(SystemCommand::Result, stdout: output))
   end
 
   describe "entries" do
@@ -129,18 +134,18 @@ RSpec.describe Homebrew::Bundle::Uv do
     context "when uv is installed" do
       before do
         described_class.reset!
-        allow(described_class).to receive(:package_manager_executable).and_return(Pathname.new("uv"))
+        allow(described_class).to receive(:package_manager_executable).and_return(Pathname("uv"))
       end
 
       it "returns normalized package entries sorted by package name" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14
           - ruff
           mkdocs v1.6.1 [with: mkdocs-material<10]
           - mkdocs
         OUTPUT
 
-        expect(dumper.packages).to eql([
+        expect(dumper.packages).to eq([
           {
             name:   "mkdocs",
             with:   ["mkdocs-material<10"],
@@ -155,7 +160,7 @@ RSpec.describe Homebrew::Bundle::Uv do
       end
 
       it "ignores executable entries when dumping packages" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           v-example v1.2.3
           - v-example
           - v2
@@ -163,21 +168,21 @@ RSpec.describe Homebrew::Bundle::Uv do
           - vulture
         OUTPUT
 
-        expect(dumper.dump).to eql(<<~BREWFILE.chomp)
+        expect(dumper.dump).to eq(<<~BREWFILE.chomp)
           uv "v-example"
           uv "vulture"
         BREWFILE
       end
 
       it "accepts headings with valid package-name forms and version strings" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           a v1.0
           7zip v1!2.0rc1+local
           my-tool.name_2 v2.0
           Vtool v1.0
         OUTPUT
 
-        expect(dumper.dump).to eql(<<~BREWFILE.chomp)
+        expect(dumper.dump).to eq(<<~BREWFILE.chomp)
           uv "7zip"
           uv "Vtool"
           uv "a"
@@ -186,129 +191,289 @@ RSpec.describe Homebrew::Bundle::Uv do
       end
 
       it "ignores lines whose first token starts with punctuation" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL)
-                                                 .and_return("vulture v2.16\n-\tv2\n• v2\n_vtool v1.0\n")
+        stub_tool_list(<<~OUTPUT)
+          vulture v2.16
+          -\tv2
+          • v2
+          _vtool v1.0
+        OUTPUT
 
-        expect(dumper.dump).to eql('uv "vulture"')
+        expect(dumper.dump).to eq('uv "vulture"')
       end
 
       it "parses a git source from the version specifier and dumps it" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14 [required:  git+https://github.com/astral-sh/ruff.git]
           - ruff
         OUTPUT
 
-        expect(dumper.packages).to eql([
+        expect(dumper.packages).to eq([
           {
             name:   "ruff",
             with:   [],
             source: "git+https://github.com/astral-sh/ruff.git",
           },
         ])
-        expect(dumper.dump).to eql('uv "ruff", source: "git+https://github.com/astral-sh/ruff.git"')
+        expect(dumper.dump).to eq('uv "ruff", source: "git+https://github.com/astral-sh/ruff.git"')
       end
 
       it "dumps a tool installed from a directory without a source" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           probetool v0.1.0 [required: file:///Users/test/src/probetool]
           - probetool
         OUTPUT
 
-        expect(dumper.dump).to eql('uv "probetool"')
+        expect(dumper.dump).to eq('uv "probetool"')
       end
 
       it "dumps a tool installed from a git+file:// URL without a source" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           probetool v0.1.0 [required: git+file:///Users/test/src/probetool]
           - probetool
         OUTPUT
 
-        expect(dumper.dump).to eql('uv "probetool"')
+        expect(dumper.dump).to eq('uv "probetool"')
       end
 
       it "dumps a tool installed from a directory named like a git repository without a source" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           probetool v0.1.0 [required: file:///Users/test/src/probetool.git]
           - probetool
         OUTPUT
 
-        expect(dumper.dump).to eql('uv "probetool"')
+        expect(dumper.dump).to eq('uv "probetool"')
       end
 
       it "ignores a bare version constraint in the version specifier" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14 [required: >=0.1]
           - ruff
         OUTPUT
 
         expect(dumper.packages.first&.dig(:source)).to be_nil
-        expect(dumper.dump).to eql('uv "ruff"')
+        expect(dumper.dump).to eq('uv "ruff"')
       end
 
       it "dumps both with and source segments" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14 [with: httpx>=0.27] [required: git+https://github.com/astral-sh/ruff.git]
           - ruff
         OUTPUT
 
-        expect(dumper.dump).to eql(
+        expect(dumper.dump).to eq(
           'uv "ruff", with: ["httpx>=0.27"], source: "git+https://github.com/astral-sh/ruff.git"',
         )
       end
 
       it "dumps correct Brewfile entries" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14 [with: httpx>=0.27]
           - ruff
         OUTPUT
 
-        expect(dumper.dump).to eql('uv "ruff", with: ["httpx>=0.27"]')
+        expect(dumper.dump).to eq('uv "ruff", with: ["httpx>=0.27"]')
       end
 
       it "handles tools with no optional metadata" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14
           - ruff
         OUTPUT
 
-        expect(dumper.dump).to eql('uv "ruff"')
+        expect(dumper.dump).to eq('uv "ruff"')
       end
 
       it "returns empty packages when no tools are installed" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return("")
+        stub_tool_list("")
 
         expect(dumper.packages).to be_empty
-        expect(dumper.dump).to eql("")
+        expect(dumper.dump).to eq("")
       end
 
       it "handles multiple with dependencies" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           mkdocs v1.6.1 [with: mkdocs-material, mkdocs-awesome-page-plugin]
           - mkdocs
         OUTPUT
 
-        expect(dumper.packages.first&.dig(:with)).to eql(["mkdocs-awesome-page-plugin", "mkdocs-material"])
+        expect(dumper.packages.first&.dig(:with)).to eq(["mkdocs-awesome-page-plugin", "mkdocs-material"])
       end
 
       it "keeps comma-constrained with requirements as a single requirement" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           ruff v0.14.14 [with: httpx>=0.27, <0.29]
           - ruff
         OUTPUT
 
-        expect(dumper.packages.first&.dig(:with)).to eql(["httpx>=0.27, <0.29"])
-        expect(dumper.dump).to eql('uv "ruff", with: ["httpx>=0.27, <0.29"]')
+        expect(dumper.packages.first&.dig(:with)).to eq(["httpx>=0.27, <0.29"])
+        expect(dumper.dump).to eq('uv "ruff", with: ["httpx>=0.27, <0.29"]')
       end
 
       it "preserves extras for the main tool requirement" do
-        allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+        stub_tool_list(<<~OUTPUT)
           fastapi v0.129.0 [extras: all, standard]
           - fastapi
         OUTPUT
 
         expect(dumper.packages.first).to include(name: "fastapi[all,standard]")
-        expect(dumper.dump).to eql('uv "fastapi[all,standard]"')
+        expect(dumper.dump).to eq('uv "fastapi[all,standard]"')
       end
+    end
+  end
+
+  shared_examples "a uv inventory" do |inventory_method|
+    let(:uv) { mktmpdir/"uv" }
+
+    before do
+      described_class.reset!
+      uv.write <<~'SH'
+        #!/bin/sh
+        printf '%s\n' 'example v1.0 [required: https://example.com/café.whl]'
+        printf '%s\n' 'warning v1.0' >&2
+      SH
+      uv.chmod 0755
+      allow(described_class).to receive(:package_manager_executable).and_return(uv)
+    end
+
+    after do
+      described_class.reset!
+    end
+
+    it "preserves text encoding and parses only stdout" do
+      expect(described_class.public_send(inventory_method)).to eq([
+        { name: "example", with: [], source: "https://example.com/café.whl" },
+      ])
+    end
+
+    it "keeps successful stderr quiet" do
+      expect { described_class.public_send(inventory_method) }.not_to output.to_stderr
+    end
+
+    it "caches successful inventories until reset" do
+      described_class.public_send(inventory_method)
+      uv.write "#!/bin/sh\nexit 1\n"
+
+      expect(described_class.public_send(inventory_method)).to eq([
+        { name: "example", with: [], source: "https://example.com/café.whl" },
+      ])
+    end
+
+    it "queries again after reset" do
+      described_class.public_send(inventory_method)
+      uv.write "#!/bin/sh\nexit 0\n"
+      described_class.reset!
+
+      expect(described_class.public_send(inventory_method)).to eq([])
+    end
+
+    it "caches a successful empty inventory" do
+      uv.write <<~'SH'
+        #!/bin/sh
+        printf '%s\n' 'No tools installed' >&2
+      SH
+      described_class.public_send(inventory_method)
+      uv.write "#!/bin/sh\nexit 1\n"
+
+      expect(described_class.public_send(inventory_method)).to eq([])
+    end
+
+    context "when uv fails after printing a plausible inventory" do
+      before do
+        uv.write <<~'SH'
+          #!/bin/sh
+          printf '%s\n' 'example v1.0'
+          printf '%s\n' 'inventory unavailable' >&2
+          exit 2
+        SH
+      end
+
+      it "raises with the exit status and diagnostic" do
+        expect { described_class.public_send(inventory_method) }
+          .to raise_error(ErrorDuringExecution, /exited with 2.*inventory unavailable/m)
+      end
+
+      it "also rejects failed empty output" do
+        uv.write "#!/bin/sh\nexit 2\n"
+
+        expect { described_class.public_send(inventory_method) }.to raise_error(ErrorDuringExecution)
+      end
+
+      it "retries a failed inventory without resetting the cache" do
+        expect { described_class.public_send(inventory_method) }.to raise_error(ErrorDuringExecution)
+        uv.write <<~'SH'
+          #!/bin/sh
+          printf '%s\n' 'another-example v2.0'
+        SH
+
+        expect(described_class.public_send(inventory_method)).to eq([
+          { name: "another-example", with: [], source: nil },
+        ])
+      end
+    end
+  end
+
+  describe ".packages" do
+    it_behaves_like "a uv inventory", :packages
+  end
+
+  describe ".installed_packages" do
+    it_behaves_like "a uv inventory", :installed_packages
+  end
+
+  shared_examples "a failed inventory dump" do |tool_list_output|
+    subject(:dump_brewfile) do
+      Homebrew::Bundle::Dumper.dump_brewfile(
+        global:          false,
+        file:            brewfile.to_s,
+        describe:        false,
+        force:           true,
+        no_restart:      false,
+        formulae:        false,
+        taps:            false,
+        casks:           false,
+        extension_types: { uv: true },
+      )
+    end
+
+    let(:uv) { mktmpdir/"uv" }
+    let(:brewfile) { mktmpdir/"Brewfile" }
+
+    before do
+      described_class.reset!
+      uv.write <<~SH
+        #!/bin/sh
+        printf '%s' '#{tool_list_output}'
+        printf '%s\\n' 'inventory unavailable' >&2
+        exit 2
+      SH
+      uv.chmod 0755
+      allow(described_class).to receive(:package_manager_executable).and_return(uv)
+    end
+
+    after do
+      described_class.reset!
+    end
+
+    it "preserves an existing Brewfile with force enabled" do
+      brewfile.write "uv \"existing-tool\"\n"
+
+      expect { dump_brewfile }.to raise_error(ErrorDuringExecution)
+      expect(brewfile.read).to eq("uv \"existing-tool\"\n")
+    end
+
+    it "does not create a Brewfile" do
+      expect { dump_brewfile }.to raise_error(ErrorDuringExecution)
+      expect(brewfile).not_to exist
+    end
+  end
+
+  describe "dumping a Brewfile when uv fails" do
+    context "with partial output" do
+      it_behaves_like "a failed inventory dump", "example v1.0"
+    end
+
+    context "with empty output" do
+      it_behaves_like "a failed inventory dump", ""
     end
   end
 
@@ -546,8 +711,8 @@ RSpec.describe Homebrew::Bundle::Uv do
   describe "consumers of parsed tool lists" do
     before do
       described_class.reset!
-      allow(described_class).to receive(:package_manager_executable).and_return(Pathname.new("uv"))
-      allow(Utils).to receive(:popen_read_text).with(*uv_tool_list_args, err: File::NULL).and_return(<<~OUTPUT)
+      allow(described_class).to receive(:package_manager_executable).and_return(Pathname("uv"))
+      stub_tool_list(<<~OUTPUT)
         vulture v2.16 [required: git+https://example.com/vulture.git] [extras: cli] [with: httpx>=0.27]
         - vulture
         - v2
@@ -563,13 +728,13 @@ RSpec.describe Homebrew::Bundle::Uv do
         Homebrew::Bundle::Dsl::Entry.new(:uv, "-"),
       ]
 
-      expect(described_class.check(entries)).to eql(["uv Tool - needs to be installed."])
+      expect(described_class.check(entries)).to eq(["uv Tool - needs to be installed."])
     end
 
     it "selects only undeclared packages for cleanup" do
       entries = [Homebrew::Bundle::Dsl::Entry.new(:uv, "vulture[cli]")]
 
-      expect(described_class.cleanup_items(entries)).to eql(["ruff"])
+      expect(described_class.cleanup_items(entries)).to eq(["ruff"])
     end
   end
 

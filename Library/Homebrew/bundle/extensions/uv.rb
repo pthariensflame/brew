@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "bundle/extensions/extension"
+require "system_command"
 
 module Homebrew
   module Bundle
@@ -71,17 +72,14 @@ module Homebrew
 
         sig { override.returns(T::Array[Tool]) }
         def packages
-          packages = @packages
-          return packages if packages
+          return @packages if @packages
+          return [] unless (uv = package_manager_executable)
 
-          @packages = if (uv = package_manager_executable)
-            output = Utils.popen_read_text(uv, "tool", "list", "--show-with", "--show-extras",
-                                           "--show-version-specifiers", err: File::NULL)
-            parse_tool_list(output)
-          end
-          return [] if @packages.nil?
-
-          @packages
+          @packages = parse_tool_list(SystemCommand.run!(
+            uv,
+            args:         ["tool", "list", "--show-with", "--show-extras", "--show-version-specifiers"],
+            print_stderr: false,
+          ).stdout)
         end
 
         sig { override.params(package: Object).returns(String) }
@@ -129,8 +127,7 @@ module Homebrew
 
         sig { override.returns(T::Array[Tool]) }
         def installed_packages
-          installed_packages = @installed_packages
-          return installed_packages if installed_packages
+          return @installed_packages if @installed_packages
 
           @installed_packages = packages.dup
         end
