@@ -79,7 +79,7 @@ module Homebrew
           search_pull_requests(query)
         else
           formulae, casks = Search.search_names(string_or_regex, args)
-          print_results(formulae, casks, query)
+          print_results(formulae, casks, query, args.quiet?)
         end
 
         puts "Use `brew desc` to list packages with a short description." if args.verbose?
@@ -142,12 +142,12 @@ module Homebrew
         GitHub.print_pull_requests_matching(query, only)
       end
 
-      sig { params(all_formulae: T::Array[String], all_casks: T::Array[String], query: String).void }
-      def print_results(all_formulae, all_casks, query)
+      sig { params(all_formulae: T::Array[String], all_casks: T::Array[String], query: String, quiet: T::Boolean).void }
+      def print_results(all_formulae, all_casks, query, quiet)
         count = all_formulae.size + all_casks.size
 
         if all_formulae.any?
-          if $stdout.tty?
+          if $stdout.tty? && !quiet
             ohai "Formulae", Formatter.columns(all_formulae)
           else
             puts all_formulae
@@ -155,7 +155,7 @@ module Homebrew
         end
         puts if all_formulae.any? && all_casks.any?
         if all_casks.any?
-          if $stdout.tty?
+          if $stdout.tty? && !quiet
             ohai "Casks", Formatter.columns(all_casks)
           else
             puts all_casks
