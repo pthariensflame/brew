@@ -140,7 +140,7 @@ module Homebrew
 
         if @github
           # Convert null to empty string. Strip trailing dots if any.
-          @desc = @github["description"].to_s.sub(/\.+$/, "")
+          @desc = @github["description"].to_s.delete_suffix(".")
           @homepage = @github["homepage"].presence || "https://github.com/#{@github["full_name"]}"
           @license = @github["license"]["spdx_id"] if @github["license"]
         end
