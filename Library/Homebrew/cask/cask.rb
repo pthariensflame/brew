@@ -879,6 +879,10 @@ module Cask
       return true if short_comparison == -1
       return false if short_comparison == 1
 
+      # A short version still matching Homebrew's installation record means a
+      # different non-CSV tap version is outdated, as for casks without `auto_updates`.
+      return true if version.csv.one? && installed_short_version && installed_short_version == installed_version
+
       build_comparisons = version.csv.filter_map do |candidate|
         compare_version_strings(installed_bundle_version, candidate.to_s)
       end
