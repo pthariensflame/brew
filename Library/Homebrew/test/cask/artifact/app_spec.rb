@@ -26,7 +26,170 @@ RSpec.describe Cask::Artifact::App, :cask do
   end
 
   describe "install_phase" do
+    context "with postflight script permissions" do
+      let(:cask) do
+        Cask::Cask.new("with-script-permissions") do
+          version "1.2.3"
+          sha256 :no_check
+          url "file://#{TEST_FIXTURE_DIR}/cask/caffeine.zip"
+          app "caffeine_darwin", target: "Renamed App.app"
+        end
+      end
+      let(:target_path) { cask.config.appdir/"Renamed App.app" }
+      let(:source_path) { cask.staged_path/"caffeine_darwin" }
+      let(:prepared_steps) { [] }
+
+      before do
+        FileUtils.mv(cask.staged_path/"Caffeine.app", source_path)
+        %w[installer.sh uninstaller.sh].each do |name|
+          (source_path/name).write "#!/bin/sh\n"
+          (source_path/name).chmod 0644
+        end
+        sandbox = instance_double(Sandbox).as_null_object
+        allow(Sandbox).to receive_messages(available?: true, new: sandbox, avoid_nested_sandboxing?: false)
+        allow(Sandbox).to receive(:with_preserved_brew_file).and_yield
+        allow(sandbox).to receive(:run) do |*args, **options|
+          prepared_steps.concat(JSON.parse(File.binread(args.fetch(-2))).fetch("steps"))
+          Utils.safe_fork(child_message_handler: options[:child_message_handler]) { exec(*args.map(&:to_s)) }
+        end
+      end
+
+      test_each([["0755", false], ["755", false], ["0755", true]]) do |mode, native|
+        it "prepares mode #{mode} before installing the app (native sandbox: #{native})" do
+          if native
+            skip "Nested sandboxing is not supported." if Sandbox.nested_sandbox?
+
+            allow(Sandbox).to receive(:new).and_call_original
+            allow(Sandbox).to receive(:with_preserved_brew_file).and_call_original
+          end
+          steps = Homebrew::InstallSteps::DSL.build do
+            set_permissions ["Renamed App.app/installer.sh", "Renamed App.app/uninstaller.sh"], mode,
+                            base: :appdir, recursive: false
+            run "Renamed App.app/installer.sh", args: ["{{version}}"], base: :appdir, sudo: true
+          end
+          postflight = Cask::Artifact::PostflightSteps.new(cask, steps)
+          cask.artifacts.add(postflight)
+
+          install_phase
+
+          expect(%w[installer.sh uninstaller.sh].map { |name| (target_path/name).stat.mode & 0777 })
+            .to eq([0755, 0755])
+          unless native
+            expect(prepared_steps).to eq([{
+              "type" => "set_permissions", "permissions" => mode, "non_recursive" => true,
+              "paths" => %w[installer.sh uninstaller.sh].map do |name|
+                { "base" => "staged_path", "path" => "caffeine_darwin/#{name}" }
+              end
+            }])
+          end
+
+          expect(command).not_to receive(:run!).with("/usr/bin/sandbox-exec", any_args)
+          expect(command).to receive(:run)
+            .with(target_path/"installer.sh", hash_including(args: ["1.2.3"], sudo: true))
+            .and_return(instance_double(SystemCommand::Result, success?: true))
+          postflight.install_phase(command:)
+        end
+      end
+
+      test_each([false, true]) do |reverse_steps|
+        it "prepares both apps when permission step order is reversed: #{reverse_steps}" do
+          second_app = described_class.new(cask, "second_darwin", target: "Second App.app")
+          FileUtils.cp_r(source_path, second_app.source)
+          cask.artifacts.add(second_app)
+          app_names = ["Renamed App.app", "Second App.app"]
+          app_names.reverse! if reverse_steps
+          cask.artifacts.add(Cask::Artifact::PostflightSteps.new(cask, Homebrew::InstallSteps::DSL.build do
+            app_names.each do |name|
+              set_permissions "#{name}/installer.sh", "0755", base: :appdir, recursive: false
+            end
+          end))
+
+          install_phase
+          expect((second_app.source/"installer.sh").stat.mode & 0777).to eq(0644)
+          second_app.install_phase(command:)
+
+          expect([target_path, second_app.target].map { |path| (path/"installer.sh").stat.mode & 0777 })
+            .to eq([0755, 0755])
+        end
+      end
+
+      test_each([
+        ["group writes", "0770", :appdir, false, "Renamed App.app/installer.sh"],
+        ["group writes with world reads", "0775", :appdir, false, "Renamed App.app/installer.sh"],
+        ["world writes", "0777", :appdir, false, "Renamed App.app/installer.sh"],
+        ["special bits", "4755", :appdir, false, "Renamed App.app/installer.sh"],
+        ["symbolic modes", "+x", :appdir, false, "Renamed App.app/installer.sh"],
+        ["invalid octal modes", "0755x", :appdir, false, "Renamed App.app/installer.sh"],
+        ["recursive changes", "0755", :appdir, true, "Renamed App.app/installer.sh"],
+        ["staged paths", "0755", :staged_path, false, "caffeine_darwin/installer.sh"],
+        ["an undeclared app", "0755", :appdir, false, "Other.app/installer.sh"],
+        ["globs", "0755", :appdir, false, "Renamed App.app/*.sh"],
+        ["traversal", "0755", :appdir, false, "Renamed App.app/../Renamed App.app/installer.sh"],
+        ["absolute paths", "0755", :appdir, false, "/Applications/Renamed App.app/installer.sh"],
+        ["app roots", "0755", :appdir, false, "Renamed App.app"],
+        ["mixed paths", "0755", :appdir, false, ["Renamed App.app/installer.sh", "Other.app/script"]],
+      ]) do |description, mode, base, recursive, paths|
+        it "does not prepare #{description}" do
+          cask.artifacts.add(Cask::Artifact::PostflightSteps.new(cask, Homebrew::InstallSteps::DSL.build do
+            set_permissions(paths, mode, base:, recursive:)
+            set_permissions "Renamed App.app/installer.sh", "0755", base: :appdir, recursive: false
+          end))
+
+          install_phase
+
+          expect((target_path/"installer.sh").stat.mode & 0777).to eq(0644)
+        end
+      end
+
+      test_each(%w[guarded preceding_command unavailable_sandbox adopt]) do |condition|
+        it "does not prepare permissions with #{condition}" do
+          allow(Sandbox).to receive(:available?).and_return(false) if condition == "unavailable_sandbox"
+          cask.artifacts.add(Cask::Artifact::PostflightSteps.new(cask, Homebrew::InstallSteps::DSL.build do
+            run "/usr/bin/true" if condition == "preceding_command"
+            if condition == "guarded"
+              if_path_exists "Renamed App.app/installer.sh", base: :appdir do
+                set_permissions "Renamed App.app/installer.sh", "0755", base: :appdir, recursive: false
+              end
+            else
+              set_permissions "Renamed App.app/installer.sh", "0755", base: :appdir, recursive: false
+            end
+          end))
+
+          app.install_phase(command:, adopt: condition == "adopt")
+
+          expect((target_path/"installer.sh").stat.mode & 0777).to eq(0644)
+        end
+      end
+
+      test_each([:symlink, :hardlink, :directory_symlink]) do |link_type|
+        it "does not prepare a #{link_type} to a file outside the app" do
+          outside = cask.staged_path/"outside/installer.sh"
+          outside.dirname.mkpath
+          outside.write "#!/bin/sh\n"
+          outside.chmod 0644
+          (source_path/"installer.sh").unlink
+          relative_path = (link_type == :directory_symlink) ? "linked/installer.sh" : "installer.sh"
+          case link_type
+          when :directory_symlink
+            File.symlink(outside.dirname, source_path/"linked")
+          when :symlink
+            File.symlink(outside, source_path/"installer.sh")
+          else
+            File.link(outside, source_path/"installer.sh")
+          end
+          cask.artifacts.add(Cask::Artifact::PostflightSteps.new(cask, Homebrew::InstallSteps::DSL.build do
+            set_permissions "Renamed App.app/#{relative_path}", "0755", base: :appdir, recursive: false
+          end))
+
+          install_phase
+
+          expect(outside.stat.mode & 0777).to eq(0644)
+        end
+      end
+    end
+
     it "installs the given app using the proper target directory" do
+      expect(Sandbox).not_to receive(:use_for?)
       install_phase
 
       expect(target_path).to be_a_directory
