@@ -180,10 +180,13 @@ module Homebrew
           run_command context_path("bin")/"pear", "config-set", key, value, "system"
         end
         run_command context_path("bin")/"pear", "update-channels"
+
+        conf_d_path = context_path("etc")/"php/#{version_major_minor}/conf.d"
+        conf_d_path.mkpath
+
         return if context_name == "php"
 
-        ext_config_path = context_path("etc")/"php/#{version_major_minor}/conf.d/ext-opcache.ini"
-        ext_config_path.dirname.mkpath
+        ext_config_path = conf_d_path/"ext-opcache.ini"
         zend_extension_line = %Q(zend_extension="#{php_ext_dir}/opcache.so")
         if ext_config_path.exist?
           require "utils/inreplace"

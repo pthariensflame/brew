@@ -1281,6 +1281,15 @@ RSpec.describe Homebrew::InstallSteps do
       INI
     end
 
+    specify "creates the conf.d directory for the unversioned formula", :aggregate_failures do
+      php_context.define_singleton_method(:name) { "php" }
+
+      runner.run(steps)
+
+      expect(ext_config_path.dirname).to be_a_directory
+      expect(ext_config_path).not_to exist
+    end
+
     specify "only replaces the active opcache extension setting" do
       ext_config_path.dirname.mkpath
       ext_config_path.write <<~INI
