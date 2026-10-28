@@ -292,7 +292,9 @@ RSpec.describe Keg do
 
     it "merges directories when the prefix is a symlink" do
       physical_prefix = HOMEBREW_PREFIX.parent/"physical-prefix"
+      prefix_moved = false
       HOMEBREW_PREFIX.rename physical_prefix
+      prefix_moved = true
       HOMEBREW_PREFIX.make_symlink physical_prefix
 
       other_keg = setup_test_keg("bar", "1.0")
@@ -306,8 +308,8 @@ RSpec.describe Keg do
 
       expect(HOMEBREW_PREFIX/"include/aws/s3/header.h").to exist
     ensure
-      if HOMEBREW_PREFIX.symlink?
-        HOMEBREW_PREFIX.unlink
+      if prefix_moved
+        HOMEBREW_PREFIX.unlink if HOMEBREW_PREFIX.symlink?
         physical_prefix.rename HOMEBREW_PREFIX
       end
     end
