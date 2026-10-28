@@ -290,24 +290,26 @@ RSpec.describe Keg do
       expect(link.lstat).to be_a_directory
     end
 
-    it "merges directories when the prefix is accessed through a symlink" do
-      linked_prefix = HOMEBREW_PREFIX.parent/"linked-prefix"
+    it "merges directories when the prefix is a symlink" do
+      physical_prefix = HOMEBREW_PREFIX.parent/"physical-prefix"
+      HOMEBREW_PREFIX.rename physical_prefix
+      HOMEBREW_PREFIX.make_symlink physical_prefix
+
       other_keg = setup_test_keg("bar", "1.0")
+      FileUtils.rm_r other_keg/"bin"
       header = other_keg/"include/aws/s3/header.h"
       header.dirname.mkpath
       touch header
       (keg/"include/aws/auth").mkpath
-
-      linked_prefix.make_symlink HOMEBREW_PREFIX
-      linked_directory = HOMEBREW_PREFIX/"include/aws"
-      linked_directory.dirname.mkpath
-      linked_directory.make_symlink linked_prefix/"Cellar/bar/1.0/include/aws"
-
+      other_keg.link
       keg.link
 
       expect(HOMEBREW_PREFIX/"include/aws/s3/header.h").to exist
     ensure
-      linked_prefix.unlink if linked_prefix.symlink?
+      if HOMEBREW_PREFIX.symlink?
+        HOMEBREW_PREFIX.unlink
+        physical_prefix.rename HOMEBREW_PREFIX
+      end
     end
 
     specify "symlinks are linked directly" do

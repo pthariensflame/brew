@@ -121,9 +121,10 @@ class Keg
     original_path = path
     raise Errno::ENOENT, original_path.to_s unless original_path.exist?
 
+    real_cellar = HOMEBREW_CELLAR.realpath
     if (path = original_path.realpath)
       until path.root?
-        return Keg.new(path) if path.parent.parent == HOMEBREW_CELLAR.realpath
+        return Keg.new(HOMEBREW_CELLAR/path.relative_path_from(real_cellar)) if path.parent.parent == real_cellar
 
         path = path.parent.realpath # realpath() prevents root? failing
       end
@@ -817,8 +818,7 @@ class Keg
     end
 
     dst.unlink unless dry_run
-    keg.link_dir(src.realpath.relative_path_from(Pathname(keg.to_path)),
-                 dry_run: false, verbose: false, overwrite: false) { :mkpath }
+    keg.link_dir(src, dry_run: false, verbose: false, overwrite: false) { :mkpath }
     true
   end
 
