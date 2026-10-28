@@ -184,7 +184,8 @@ module Homebrew
         conf_d_path = context_path("etc")/"php/#{version_major_minor}/conf.d"
         conf_d_path.mkpath
 
-        return if context_name == "php"
+        # OPcache is part of the PHP binary as of PHP 8.5.
+        return unless (php_ext_dir/"opcache.so").exist?
 
         ext_config_path = conf_d_path/"ext-opcache.ini"
         zend_extension_line = %Q(zend_extension="#{php_ext_dir}/opcache.so")
