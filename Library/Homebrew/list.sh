@@ -51,11 +51,13 @@ homebrew-list() {
       *) return 1 ;;
     esac
   done
-  # If we haven't reached the end of the arg list, we have named args.
-  if ((OPTIND - 1 != $#))
-  then
-    return 1
-  fi
+  # If we haven't reached the end of the arg list, we have named args:
+  # only `--versions` with plain formula names is handled here.
+  local name
+  for name in "${@:OPTIND}"
+  do
+    [[ -n "${versions}" && -z "${json}" && -n "${name}" && "${name}" != [-.]* && "${name}" != */* ]] || return 1
+  done
 
   if [[ -n "${json}" ]]
   then
@@ -221,7 +223,9 @@ homebrew-list() {
 
   if [[ -n "${versions}" ]]
   then
-    return 1
+    [[ -z "${cask}${ls_flag}" ]] || return 1
+    homebrew-list-formula-versions "${formula}" "${@:OPTIND}"
+    return
   fi
 
   if [[ -z "${cask}" && -d "${HOMEBREW_CELLAR}" ]]
@@ -277,4 +281,67 @@ homebrew-list() {
 
     return 0
   fi
+}
+
+# Keep in sync with Homebrew::Cmd::List#filtered_list in Library/Homebrew/cmd/list.rb.
+# Casks, aliases, renamed formulae and names without a rack return 1 so Ruby handles them.
+homebrew-list-formula-versions() {
+  local formula="$1"
+  shift
+  local LC_ALL=C
+
+  local racks=()
+  local rack
+  if (($# > 0))
+  then
+    # Sort the named racks bytewise and keep repeated names, as Ruby does.
+    local name i
+    for name in "$@"
+    do
+      rack="${HOMEBREW_CELLAR}/${name}"
+      [[ -d "${rack}" && ! -L "${rack}" ]] || return 1
+      i="${#racks[@]}"
+      while ((i > 0)) && [[ "${racks[i - 1]}" > "${rack}" ]]
+      do
+        racks[i]="${racks[i - 1]}"
+        i="$((i - 1))"
+      done
+      racks[i]="${rack}"
+    done
+  else
+    if [[ -z "${formula}" && -d "${HOMEBREW_CASKROOM}" ]]
+    then
+      local cask_path
+      for cask_path in "${HOMEBREW_CASKROOM}"/*
+      do
+        [[ -d "${cask_path}" ]] && return 1
+      done
+    fi
+
+    for rack in "${HOMEBREW_CELLAR}"/*
+    do
+      [[ -d "${rack}" && ! -L "${rack}" ]] || continue
+      racks+=("${rack}")
+    done
+  fi
+
+  # Ruby lists a rack's subdirectories, hidden ones included, in directory order,
+  # which a glob can't reproduce, so racks with more than one return 1 too.
+  local kegs keg keg_version lines=()
+  for rack in "${racks[@]}"
+  do
+    shopt -s dotglob
+    kegs=("${rack}"/*)
+    shopt -u dotglob
+    keg_version=""
+    for keg in "${kegs[@]}"
+    do
+      [[ -d "${keg}" ]] || continue
+      [[ -z "${keg_version}" ]] || return 1
+      keg_version="${keg##*/}"
+    done
+    (($# > 0)) || [[ -n "${keg_version}" ]] || continue
+    lines+=("${rack##*/} ${keg_version}")
+  done
+  ((${#lines[@]} == 0)) || printf '%s\n' "${lines[@]}"
 }

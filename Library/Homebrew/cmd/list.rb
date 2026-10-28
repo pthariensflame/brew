@@ -294,6 +294,8 @@ module Homebrew
         "#{token}#{" #{Utils::Path.resolved_path(pin_path).basename}" if args.versions?}"
       end
 
+      # Keep in sync with `homebrew-list-formula-versions` in
+      # Library/Homebrew/list.sh.
       sig { void }
       def filtered_list
         names = if args.no_named?
