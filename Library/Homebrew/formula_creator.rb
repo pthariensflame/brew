@@ -97,7 +97,7 @@ module Homebrew
       @version = T.let(version, Version)
 
       @sha256 = T.let(nil, T.nilable(String))
-      @desc = T.let(nil, T.nilable(String))
+      @desc = T.let("", String)
       @homepage = T.let(nil, T.nilable(String))
       @license = T.let(nil, T.nilable(String))
     end
@@ -139,7 +139,8 @@ module Homebrew
         end
 
         if @github
-          @desc = @github["description"]
+          # Convert null to empty string. Strip trailing dots if any.
+          @desc = @github["description"].to_s.sub(/\.+$/, "")
           @homepage = @github["homepage"].presence || "https://github.com/#{@github["full_name"]}"
           @license = @github["license"]["spdx_id"] if @github["license"]
         end
@@ -171,7 +172,7 @@ module Homebrew
           include Language::Python::Virtualenv
 
         <% end %>
-          desc <%= @desc.to_s.inspect %>
+          desc <%= @desc.inspect %>
           homepage <%= @homepage.to_s.inspect %>
         <% unless @head %>
           url <%= @url.inspect %>
