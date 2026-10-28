@@ -141,10 +141,12 @@ RSpec.describe Homebrew::Cmd::List do
   # tested against each other.
   it "matches the Bash fast path against the Ruby command", :cask do
     install_formula_version "testball", "0.1"
+    install_formula_version "bar", "1.0"
     install_cask "local-caffeine"
     FileUtils.ln_s "missing-cask", Cask::Caskroom.path/"dangling-alias"
 
-    variants = [[], ["-1"], ["--formula"], ["--cask"]]
+    variants = [[], ["-1"], ["--formula"], ["--cask"], ["--versions", "--formula"], ["--versions", "testball"],
+                ["--versions", "testball", "bar"], ["--versions", "testball", "testball"]]
     bash_results = variants.map do |argv|
       stdout, stderr, status = bash_list_output(argv)
       [argv, status.success?, stdout, stderr]
@@ -155,6 +157,26 @@ RSpec.describe Homebrew::Cmd::List do
     end
 
     expect(bash_results).to eq(ruby_results)
+  end
+
+  it "leaves other version listings to the Ruby command" do
+    install_formula_version "testball", "0.1"
+    install_formula_version "multiple", "1.0"
+    install_formula_version "multiple", "2.0"
+    install_formula_version "hidden", "1.0"
+    (HOMEBREW_CELLAR/"hidden/.hidden").mkpath
+
+    variants = [%w[--versions --cask], %w[--versions -1], %w[--versions --formula --cask], %w[--versions ..],
+                %w[--versions testball missing], %w[--versions homebrew/core/testball], %w[--versions missing],
+                %w[--versions multiple], %w[--versions hidden], %w[--versions --formula]]
+
+    expect(variants.select { |argv| bash_list_output(argv).last.success? }).to be_empty
+  end
+
+  it "leaves an empty formula name to the Ruby command" do
+    install_formula_version "testball", "0.1"
+
+    expect(bash_list_output(["--versions", ""]).last).not_to be_success
   end
 
   it "prints all installed formulae" do
