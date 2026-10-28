@@ -584,7 +584,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       end
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: c_per_os, repositories: [], name: "per-os-cask",
+        formula_or_cask: c_per_os, repositories: [],
       )
       expect(version_info.new_version).to eq(Homebrew::BumpVersionParser.new(
                                                arm:         Version.new("2.0"),
@@ -603,7 +603,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       end
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: c_per_os, repositories: [], name: "per-os-cask",
+        formula_or_cask: c_per_os, repositories: [],
       )
       expect(
         bump.version_args_for_bump(
@@ -625,7 +625,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       end
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: c_per_os, repositories: [], name: "per-os-cask",
+        formula_or_cask: c_per_os, repositories: [],
       )
       expect(version_info.cooldown_skipped_versions).to eq({
         arm:   Version.new("2.1"),
@@ -638,7 +638,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
 
       version_info = Homebrew::SimulateSystem.with(os: newest_macos, arch: :arm) do
         bump.retrieve_versions_by_arch(
-          formula_or_cask: c_macos_versions, repositories: [], name: "macos-versions-cask",
+          formula_or_cask: c_macos_versions, repositories: [],
         )
       end
       expect(version_info.new_version).to eq(Homebrew::BumpVersionParser.new(general: Version.new("1.2.4")))
@@ -650,7 +650,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       expect(bump).to receive(:livecheck_result).once.and_return([Version.new("1.2.4"), nil])
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: c_arm_only, repositories: [], name: "arm-only-cask",
+        formula_or_cask: c_arm_only, repositories: [],
       )
       expect(version_info.new_version).to eq(Homebrew::BumpVersionParser.new(general: Version.new("1.2.4")))
     end
@@ -661,7 +661,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       expect(bump).to receive(:livecheck_result).once.and_return([Version.new("1.2.4"), nil])
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: c_intel_only, repositories: [], name: "intel-only-cask",
+        formula_or_cask: c_intel_only, repositories: [],
       )
       expect(version_info.new_version).to eq(Homebrew::BumpVersionParser.new(general: Version.new("1.2.4")))
     end
@@ -670,7 +670,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       expect(bump).to receive(:livecheck_result).once.and_return([Version.new("1.2.3"), Version.new("1.2.4")])
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: f_basic, repositories: [], name: "basic_formula",
+        formula_or_cask: f_basic, repositories: [],
       )
       expect(version_info.cooldown_skipped_versions).to eq({ general: Version.new("1.2.4") })
     end
@@ -692,7 +692,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       )
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: f_prerelease, repositories: [], name: "prerelease_formula",
+        formula_or_cask: f_prerelease, repositories: [],
       )
       expect(version_info.cooldown_skipped_versions).to eq({ general: Version.new("1.2.4") })
     end
@@ -706,7 +706,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
       )
 
       version_info = bump.retrieve_versions_by_arch(
-        formula_or_cask: c_multi_arch, repositories: [], name: "multi-arch-cask",
+        formula_or_cask: c_multi_arch, repositories: [],
       )
       expect(version_info.cooldown_skipped_versions).to eq({ arm:   Version.new("1.2.5"),
                                                              intel: Version.new("1.2.4") })
@@ -993,7 +993,7 @@ RSpec.describe Homebrew::DevCmd::Bump do
     it "outputs all pull requests API returned when given a version" do
       title_2 = "#{name}: update to #{version}"
       add_pull_request(title_2, 101)
-      expect(bump.retrieve_pull_requests(f_basic, name, version:)).to eq(
+      expect(bump.retrieve_pull_requests(f_basic, version:)).to eq(
         "#{title} (#{pull_url}/100), #{title_2} (#{pull_url}/101)",
       )
     end
@@ -1001,7 +1001,16 @@ RSpec.describe Homebrew::DevCmd::Bump do
     it "filters pull requests when not given a version" do
       add_pull_request("#{name}: fix an issue with formula", 101)
       add_pull_request("some other PR with #{name} #{version}", 102)
-      expect(bump.retrieve_pull_requests(f_basic, name)).to eq("#{title} (#{pull_url}/100)")
+      expect(bump.retrieve_pull_requests(f_basic)).to eq("#{title} (#{pull_url}/100)")
+    end
+
+    it "searches using the short name for packages in non-core taps" do
+      allow(c_basic).to receive(:tap).and_return(Tap.fetch(tap_name))
+      expect(c_basic.full_name).to eq("#{tap_name}/basic_cask")
+      expect(GitHub).to receive(:fetch_pull_requests)
+        .with("basic_cask", anything, state: "open", version: nil)
+        .and_return([])
+      bump.retrieve_pull_requests(c_basic, state: "open")
     end
   end
 end
