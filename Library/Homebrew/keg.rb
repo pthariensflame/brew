@@ -817,7 +817,8 @@ class Keg
     end
 
     dst.unlink unless dry_run
-    keg.link_dir(src, dry_run: false, verbose: false, overwrite: false) { :mkpath }
+    keg.link_dir(src.realpath.relative_path_from(Pathname(keg.to_path)),
+                 dry_run: false, verbose: false, overwrite: false) { :mkpath }
     true
   end
 
