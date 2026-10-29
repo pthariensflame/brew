@@ -290,6 +290,7 @@ The default `brew upgrade` includes the cask when the installed app appears olde
 
 This comparison is not available for every artifact or versioning scheme.
 When Homebrew cannot make a reliable comparison, it normally skips the self-updating cask instead of guessing.
+An exception is a cask whose version has no comma-separated parts and whose app version still matches Homebrew's installation record: as for apps that don't update themselves, Homebrew then includes the cask if its version differs, even if that version is older.
 To persistently opt out of automatic upgrades for all `auto_updates true` casks, add `export HOMEBREW_NO_UPGRADE_AUTO_UPDATES_CASKS=1` to your shell configuration.
 This does not affect upgrades requested with `--greedy` or `--greedy-auto-updates`.
 

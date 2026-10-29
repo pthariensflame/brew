@@ -460,6 +460,51 @@ RSpec.describe Cask::Cask, :cask do
 
         expect(cask.outdated_version).to be_nil
       end
+
+      it "is outdated when the unchanged short version is lower than a tap version with more segments" do
+        tap_version = "158.0.1"
+        cask = write_auto_updates_cask(cask_file, version: tap_version, artifacts:)
+        allow(cask).to receive(:installed_version).and_return("158.0")
+        write_info_plist(cask.config.appdir/"MyFancyApp.app", short_version: "158.0", bundle_version: "15826.10.13")
+
+        expect(cask.outdated_version).to eq("158.0")
+      end
+
+      it "is outdated when the unchanged short version is lower than a tap version with fewer segments" do
+        tap_version = "157.0"
+        cask = write_auto_updates_cask(cask_file, version: tap_version, artifacts:)
+        allow(cask).to receive(:installed_version).and_return("156.0.1")
+        write_info_plist(cask.config.appdir/"MyFancyApp.app", short_version: "156.0.1", bundle_version: "15626.9.20")
+
+        expect(cask.outdated_version).to eq("156.0.1")
+      end
+
+      it "is not outdated when a self-updated short version cannot be compared with the tap version" do
+        tap_version = "158.0.1"
+        cask = write_auto_updates_cask(cask_file, version: tap_version, artifacts:)
+        allow(cask).to receive(:installed_version).and_return("158.0")
+        write_info_plist(cask.config.appdir/"MyFancyApp.app", short_version: "159.0", bundle_version: "15926.11.10")
+
+        expect(cask.outdated_version).to be_nil
+      end
+
+      it "is not outdated when the unchanged short version has a bundle version matching a CSV tap version" do
+        tap_version = "1.0.1,3000"
+        cask = write_auto_updates_cask(cask_file, version: tap_version, artifacts:)
+        allow(cask).to receive(:installed_version).and_return("1.0")
+        write_info_plist(cask.config.appdir/"MyFancyApp.app", short_version: "1.0", bundle_version: "3000")
+
+        expect(cask.outdated_version).to be_nil
+      end
+
+      it "is outdated when the unchanged short version is higher than a tap version with fewer segments" do
+        tap_version = "158.0"
+        cask = write_auto_updates_cask(cask_file, version: tap_version, artifacts:)
+        allow(cask).to receive(:installed_version).and_return("158.0.1")
+        write_info_plist(cask.config.appdir/"MyFancyApp.app", short_version: "158.0.1", bundle_version: "15826.10.20")
+
+        expect(cask.outdated_version).to eq("158.0.1")
+      end
     end
 
     describe ":latest casks" do
