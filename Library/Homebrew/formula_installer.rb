@@ -836,6 +836,10 @@ on_request: installed_on_request?, options:)
         next unless dep.satisfied?(minimum_compatibility_version: dep_formula.compatibility_version)
       end
 
+      # `Build` expands the current formula's runtime dependencies, so they must all be installed.
+      next if !dep.build? && dep_formula.runtime_dependencies(read_from_tab: false, undeclared: false)
+                                        .any? { |runtime_dep| !runtime_dep.to_formula.opt_prefix.exist? }
+
       runtime_dependencies = dep_formula.any_installed_keg&.runtime_dependencies
       next if runtime_dependencies.nil?
 

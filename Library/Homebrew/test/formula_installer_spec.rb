@@ -1279,11 +1279,18 @@ RSpec.describe FormulaInstaller do
         before do
           allow(runtime_dep).to receive(:satisfied?).and_return(false)
           allow(runtime_dep).to receive(:satisfied?).with(minimum_compatibility_version: 1).and_return(true)
+          allow(runtime_dep_formula).to receive(:opt_prefix).and_return(instance_double(Pathname, exist?: true))
           allow(f).to receive(:deps).and_return([runtime_dep])
         end
 
         it "keeps it" do
           expect(installer.expand_dependencies_for_formula(f).map(&:name)).not_to include(runtime_dep.name)
+        end
+
+        it "upgrades it if its current formula needs a dependency that isn't installed" do
+          allow(runtime_dep_formula).to receive(:opt_prefix).and_return(instance_double(Pathname, exist?: false))
+
+          expect(installer.expand_dependencies_for_formula(f).map(&:name)).to include(runtime_dep.name)
         end
 
         it "upgrades it when pouring a bottle" do
