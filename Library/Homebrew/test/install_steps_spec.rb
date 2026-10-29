@@ -1229,6 +1229,7 @@ RSpec.describe Homebrew::InstallSteps do
     let(:pear_prefix) { root/"prefix/share/php@8.4/pear" }
     let(:pecl_path) { homebrew_prefix/"lib/php/pecl" }
     let(:ext_config_path) { homebrew_prefix/"etc/php/8.4/conf.d/ext-opcache.ini" }
+    let(:opcache_so) { root/"opt/php@8.4/lib/php/20240924/opcache.so" }
     let(:php_context) do
       root_path = root
       context.tap do |value|
@@ -1251,6 +1252,8 @@ RSpec.describe Homebrew::InstallSteps do
       FileUtils.chmod 0600, [pear_prefix/".channels/pear.php.net.reg", pear_prefix/".channels/.alias/pear.txt",
                              pear_prefix/".depdblock"]
       (homebrew_prefix/"share").mkpath
+      opcache_so.dirname.mkpath
+      FileUtils.touch opcache_so
       File.symlink root/"missing-pecl", root/"prefix/pecl"
       allow(runner).to receive(:run_command_output)
         .with(root/"prefix/bin/php-config", "--extension-dir")
@@ -1283,6 +1286,16 @@ RSpec.describe Homebrew::InstallSteps do
 
     specify "creates the conf.d directory for the unversioned formula", :aggregate_failures do
       php_context.define_singleton_method(:name) { "php" }
+      opcache_so.delete
+
+      runner.run(steps)
+
+      expect(ext_config_path.dirname).to be_a_directory
+      expect(ext_config_path).not_to exist
+    end
+
+    specify "does not configure opcache when it is built in", :aggregate_failures do
+      opcache_so.delete
 
       runner.run(steps)
 
