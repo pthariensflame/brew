@@ -1150,6 +1150,8 @@ module Homebrew
 
       compatibility_increment = current_compatibility_version - previous_compatibility_version
       return if compatibility_increment.zero?
+      # Tabs from before a first `compatibility_version` can't match it, so no dependent needs rebuilding.
+      return if base_ref_version_info[:compatibility_version].nil?
       return unless formula.valid_platform?
 
       dependent_revision_bumps = changed_formulae_paths(tap).filter_map do |path|
@@ -1174,6 +1176,25 @@ module Homebrew
               "`revision` by 1 in this PR. Only bump `compatibility_version` when at least one recursive " \
               "dependent needs a `revision` bump. " \
               "See #{Formatter.url("https://docs.brew.sh/Formula-Cookbook#compatibility_version")}."
+    end
+
+    sig { void }
+    def audit_dependencies_compatibility_version
+      return if !formula.core_formula? || (!@git && !@new_formula_inclusive)
+
+      _, base_ref_version_info = committed_version_info
+      previous_dependency_names = base_ref_version_info.fetch(:dependency_names, [])
+      formula.deps.each do |dep|
+        next if previous_dependency_names.include?(dep.name)
+
+        dependency = dep.to_formula
+        next if !dependency.core_formula? || dependency.compatibility_version
+
+        problem "`#{dependency.name}` should define `compatibility_version 1` now that `#{formula.name}` " \
+                "depends on it. See #{Formatter.url("https://docs.brew.sh/Formula-Cookbook#compatibility_version")}."
+      rescue FormulaUnavailableError
+        next
+      end
     end
 
     sig { void }
@@ -1360,6 +1381,7 @@ module Homebrew
             base_ref_version_info[:revision] ||= previous_version_info[:revision]
             base_ref_version_info[:version_scheme] ||= previous_version_info[:version_scheme]
             base_ref_version_info[:compatibility_version] ||= previous_version_info[:compatibility_version]
+            base_ref_version_info[:dependency_names] ||= f.deps.map(&:name)
           end
         rescue MacOSVersion::Error, LegacyDSLError
           break
