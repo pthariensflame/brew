@@ -1192,8 +1192,17 @@ __fish_brew_complete_arg 'generate-advisories-api' -l verbose -d 'Make some outp
 
 complete -f -c brew -n 'not __fish_brew_command; and set -q HOMEBREW_DEVELOPER' -a 'generate-analytics-api' -d 'Generates analytics API data files for https://formulae.brew.sh'
 __fish_brew_complete_arg 'generate-analytics-api' -l debug -d 'Display any debugging information'
+__fish_brew_complete_arg 'generate-analytics-api' -l formula-history -d 'Generate only formula version history, resuming its persistent Git checkpoint'
+__fish_brew_complete_arg 'generate-analytics-api' -l github-packages -d 'Generate only package downloads, using existing 30-day install analytics'
+__fish_brew_complete_arg 'generate-analytics-api' -l github-packages-limit -d 'Fetch downloads for the top number of formulae by install analytics (1-1000; default: 1000)'
 __fish_brew_complete_arg 'generate-analytics-api' -l help -d 'Show this message'
+__fish_brew_complete_arg 'generate-analytics-api' -l history -d 'Reuse completed-year aggregates from this JSON file'
+__fish_brew_complete_arg 'generate-analytics-api' -l homebrew-site -d 'Read brew.sh release announcements and security disclosures from this Git checkout'
+__fish_brew_complete_arg 'generate-analytics-api' -l influx -d 'Generate only InfluxDB analytics, without local Git histories or GitHub queries'
+__fish_brew_complete_arg 'generate-analytics-api' -l legacy-homebrew -d 'Include the legacy Homebrew repository at this path in repository analytics'
 __fish_brew_complete_arg 'generate-analytics-api' -l quiet -d 'Make some output more quiet'
+__fish_brew_complete_arg 'generate-analytics-api' -l releases -d 'Generate only brew release analytics from local Git history and tags'
+__fish_brew_complete_arg 'generate-analytics-api' -l repositories -d 'Generate only repository and catalogue analytics from local Git history and GitHub'
 __fish_brew_complete_arg 'generate-analytics-api' -l verbose -d 'Make some output more verbose'
 
 

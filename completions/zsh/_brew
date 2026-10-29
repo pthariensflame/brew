@@ -1564,8 +1564,17 @@ _brew_generate_advisories_api() {
 _brew_generate_analytics_api() {
   _arguments \
     '--debug[Display any debugging information]' \
+    '(--influx --repositories --releases --github-packages)--formula-history[Generate only formula version history, resuming its persistent Git checkpoint]' \
+    '(--influx --repositories --formula-history --releases)--github-packages[Generate only package downloads, using existing 30-day install analytics]' \
+    '--github-packages-limit[Fetch downloads for the top number of formulae by install analytics (1-1000; default: 1000)]' \
     '--help[Show this message]' \
+    '--history[Reuse completed-year aggregates from this JSON file]' \
+    '--homebrew-site[Read brew.sh release announcements and security disclosures from this Git checkout]' \
+    '(--repositories --formula-history --releases --github-packages)--influx[Generate only InfluxDB analytics, without local Git histories or GitHub queries]' \
+    '--legacy-homebrew[Include the legacy Homebrew repository at this path in repository analytics]' \
     '--quiet[Make some output more quiet]' \
+    '(--influx --repositories --formula-history --github-packages)--releases[Generate only brew release analytics from local Git history and tags]' \
+    '(--influx --formula-history --releases --github-packages)--repositories[Generate only repository and catalogue analytics from local Git history and GitHub]' \
     '--verbose[Make some output more verbose]'
 }
 
