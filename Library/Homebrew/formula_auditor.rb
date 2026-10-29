@@ -1150,8 +1150,10 @@ module Homebrew
 
       compatibility_increment = current_compatibility_version - previous_compatibility_version
       return if compatibility_increment.zero?
-      # Tabs from before a first `compatibility_version` can't match it, so no dependent needs rebuilding.
-      return if base_ref_version_info[:compatibility_version].nil?
+
+      # Tabs from before a first `compatibility_version` can't match it, so adding one alone rebuilds nothing.
+      first_compatibility_version = base_ref_version_info[:compatibility_version].nil?
+      return if first_compatibility_version && base_ref_version_info[:version] == formula.stable&.version
       return unless formula.valid_platform?
 
       dependent_revision_bumps = changed_formulae_paths(tap).filter_map do |path|
@@ -1185,7 +1187,7 @@ module Homebrew
       _, base_ref_version_info = committed_version_info
       previous_dependency_names = base_ref_version_info.fetch(:dependency_names, [])
       formula.deps.each do |dep|
-        next if previous_dependency_names.include?(dep.name)
+        next if dep.implicit? || previous_dependency_names.include?(dep.name)
 
         dependency = dep.to_formula
         next if !dependency.core_formula? || dependency.compatibility_version

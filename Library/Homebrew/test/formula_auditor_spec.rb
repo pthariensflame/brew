@@ -2059,6 +2059,21 @@ RSpec.describe Homebrew::FormulaAuditor do
       expect(auditor.problems).to be_empty
     end
 
+    it "requires dependent revision bumps for a first compatibility_version 1 with a version change" do
+      stub_committed_info(
+        auditor,
+        default: [{ version: Version.new("0.9"), compatibility_version: nil }] * 2,
+      )
+      stub_changed_paths(auditor, all_paths: [])
+      allow(target_formula).to receive(:compatibility_version).and_return(1)
+
+      auditor.audit_compatibility_version
+
+      expect(auditor.problems).to include(
+        a_hash_including(message: a_string_matching(/no recursive dependent formulae increased/)),
+      )
+    end
+
     context "with existing committed compatibility_version" do
       before do
         stub_changed_paths(auditor, all_paths: [])
@@ -2198,6 +2213,15 @@ RSpec.describe Homebrew::FormulaAuditor do
       expect(fa.problems).to include(
         a_hash_including(message: a_string_matching(/`bar` should define `compatibility_version 1`/)),
       )
+    end
+
+    it "ignores an implicit dependency" do
+      stub_committed_info(fa, default: [{}, {}])
+      allow(fa.formula).to receive(:deps).and_return([Dependency.new(dependency.name, [:build, :implicit])])
+
+      fa.audit_dependencies_compatibility_version
+
+      expect(fa.problems).to be_empty
     end
 
     it "ignores a dependency that was already there" do
