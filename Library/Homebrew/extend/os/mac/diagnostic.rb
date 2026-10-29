@@ -109,6 +109,21 @@ module OS
         end
 
         sig { returns(T.nilable(::Homebrew::Diagnostic::Finding)) }
+        def check_for_emudhra_certificates
+          # GitHub Actions runner images still include these roots.
+          return if GitHub::Actions.env_set?
+
+          script = (HOMEBREW_LIBRARY_PATH/"utils/emudhra_certificates.rb").to_s.shellescape
+          certificate_trust_check(
+            "/etc/ssl/cert.pem",
+            # Keep root names in sync with utils/emudhra_certificates.rb.
+            root_names:   ["emSign ECC Root CA - G3", "AAA Certificate Services"],
+            advisory_url: "https://support.apple.com/en-us/149555",
+            script:,
+          )
+        end
+
+        sig { returns(T.nilable(::Homebrew::Diagnostic::Finding)) }
         def check_for_non_prefixed_findutils
           findutils = ::Formula["findutils"]
           return unless findutils.any_version_installed?
