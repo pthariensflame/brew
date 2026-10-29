@@ -128,6 +128,50 @@ module Homebrew
           EOS
         end
       end
+
+      # Reports trusted roots and a script to remove them from a certificate bundle.
+      sig {
+        params(cert_file: String, root_names: T::Array[String], advisory_url: String, script: String)
+          .returns(T.nilable(Finding))
+      }
+      def certificate_trust_check(cert_file, root_names:, advisory_url:, script:)
+        require "openssl"
+
+        roots = OpenSSL::X509::Certificate.load(File.read(cert_file)).flat_map do |certificate|
+          certificate.subject.to_a.filter_map { |name, value, _type| value if name == "CN" }
+        end & root_names
+        return if roots.empty?
+
+        Finding.new(
+          append_indented_list(roots, <<~EOS),
+            Root certificates in #{cert_file} can trust compromised CAs.
+            Command-line tools using this file may accept forged TLS certificates:
+          EOS
+          links:       [advisory_url],
+          remediation: <<~EOS,
+            Run this script to create a backup and remove these roots:
+              sudo #{RUBY_PATH.to_s.shellescape} --disable=gems,rubyopt #{script}
+
+            The script validates the bundle before replacing it. Removing the roots
+            can break HTTPS connections to some websites.
+
+            Run `brew doctor` afterwards and after system updates, which can restore
+            the roots.
+            For details and software update plans, see:
+              #{advisory_url}
+          EOS
+        )
+      rescue Errno::ENOENT
+        nil
+      rescue SystemCallError, OpenSSL::OpenSSLError
+        Finding.new(
+          "Could not check #{cert_file} for roots that trust compromised CAs.",
+          remediation: <<~EOS,
+            Ensure the file is readable and contains valid PEM certificates,
+            then rerun `brew doctor`.
+          EOS
+        )
+      end
       ############# @!endgroup END HELPERS
 
       sig { returns(T::Array[String]) }
