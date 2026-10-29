@@ -54,6 +54,15 @@ Debug mode is not an opt-out mechanism; use one of the settings below when the r
 Aggregate reports and their JSON representations are available from the [Homebrew analytics site](https://formulae.brew.sh/analytics/).
 Most Homebrew maintainers have access only to these public aggregates.
 
+[Analytics reports](https://formulae.brew.sh/analytics/) describe sources, periods, column definitions and limitations.
+
+`brew generate-analytics-api` generates these reports; `--repositories`, `--releases`, `--formula-history` and `--github-packages` run individual collections without InfluxDB.
+`--influx` generates only InfluxDB reports without local Git histories or GitHub queries.
+Regenerating analytics preserves security reports produced by the formula and advisory generators.
+Git reports require complete local repository histories; formula history resumes a persistent checkpoint.
+`--history=/path/to/history.json` reuses completed-year aggregates committed in formulae.brew.sh.
+`--github-packages-limit=1000` selects up to 1000 formulae using an existing 30-day install report.
+
 ## Transport and failure behaviour
 
 Homebrew sends analytics to InfluxDB over HTTPS in a detached background process.

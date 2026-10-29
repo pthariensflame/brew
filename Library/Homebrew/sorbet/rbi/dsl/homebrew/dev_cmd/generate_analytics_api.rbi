@@ -10,4 +10,31 @@ class Homebrew::DevCmd::GenerateAnalyticsApi
   def args; end
 end
 
-class Homebrew::DevCmd::GenerateAnalyticsApi::Args < Homebrew::CLI::Args; end
+class Homebrew::DevCmd::GenerateAnalyticsApi::Args < Homebrew::CLI::Args
+  sig { returns(T::Boolean) }
+  def formula_history?; end
+
+  sig { returns(T::Boolean) }
+  def github_packages?; end
+
+  sig { returns(T.nilable(String)) }
+  def github_packages_limit; end
+
+  sig { returns(T.nilable(String)) }
+  def history; end
+
+  sig { returns(T.nilable(String)) }
+  def homebrew_site; end
+
+  sig { returns(T::Boolean) }
+  def influx?; end
+
+  sig { returns(T.nilable(String)) }
+  def legacy_homebrew; end
+
+  sig { returns(T::Boolean) }
+  def releases?; end
+
+  sig { returns(T::Boolean) }
+  def repositories?; end
+end

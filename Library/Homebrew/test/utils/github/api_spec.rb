@@ -16,6 +16,19 @@ RSpec.describe GitHub::API do
     end
   end
 
+  it "optionally returns response headers for cursor pagination" do
+    allow(described_class).to receive(:credentials).and_return(nil)
+    allow(Utils::Curl).to receive(:curl_output) do |*args, **|
+      File.write(args.fetch(args.index("--dump-header").to_i + 1),
+                 "HTTP/2 200\r\nLink: <https://api.github.com/next>; rel=\"next\"\r\n")
+      instance_double(SystemCommand::Result, stdout: "[]\n200",
+                                             status: instance_double(Process::Status, success?: true))
+    end
+
+    expect(described_class.open_rest("https://api.github.com/example", return_headers: true))
+      .to match([[], include('Link: <https://api.github.com/next>; rel="next"')])
+  end
+
   describe "::sleep_for_rate_limit" do
     it "sleeps for at least 1 second even if the rate limit has already reset" do
       exception = GitHub::API::RateLimitExceededError.new(

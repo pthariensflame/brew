@@ -6,6 +6,7 @@ require "api"
 require "executables_db"
 require "fileutils"
 require "formula"
+require "utils/analytics/vulnerabilities"
 require "vulns/advisory_database"
 
 module Homebrew
@@ -50,7 +51,14 @@ module Homebrew
           odie "Failed to download #{executables_path}"
         end
         executables = ExecutablesDB.new(executables_path.to_s).to_hash
-        advisories = load_advisory_database
+        # An advisory-database or network failure must not break the API build;
+        # the `vulnerabilities` field is omitted and the build proceeds.
+        advisories = begin
+          Homebrew::Vulns::AdvisoryDatabase.load
+        rescue Homebrew::Vulns::CachedFeed::Error, ErrorDuringExecution => e
+          opoo "Skipping vulnerabilities field: #{e.message.lines.first&.strip}"
+          nil
+        end
 
         Homebrew::API.with_no_api_env do
           tap_migrations_json = JSON.dump(tap.tap_migrations)
@@ -70,13 +78,18 @@ module Homebrew
               if (vulns = advisories&.status_for(name, formula.pkg_version))
                 all_formulae[name]["vulnerabilities"] = vulns
               end
-              json = JSON.pretty_generate(all_formulae[name])
-              html_template_name = html_template(name)
 
               unless args.dry_run?
-                File.write("_data/formula/#{name.tr("+", "_")}.json", "#{json}\n")
+                File.write("_data/formula/#{name.tr("+", "_")}.json", "#{JSON.pretty_generate(all_formulae[name])}\n")
                 File.write("api/formula/#{name}.json", FORMULA_JSON_TEMPLATE)
-                File.write("formula/#{name}.html", html_template_name)
+                File.write("formula/#{name}.html", <<~EOS)
+                  ---
+                  title: '#{name}'
+                  layout: formula
+                  redirect_from: /formula-linux/#{name}
+                  ---
+                  {{ content }}
+                EOS
               end
             rescue
               onoe "Error while generating data for formula '#{name}'."
@@ -86,6 +99,14 @@ module Homebrew
 
           canonical_json = JSON.pretty_generate(tap.formula_renames.merge(tap.alias_table))
           File.write("_data/formula_canonical.json", "#{canonical_json}\n") unless args.dry_run?
+
+          unless args.dry_run?
+            Utils::Analytics.write_api(
+              "security", "current",
+              Utils::Analytics::Vulnerabilities.catalogue(all_formulae, available: !advisories.nil?,
+                                                                        revision:  tap.git_head)
+            )
+          end
 
           OnSystem::VALID_OS_ARCH_TAGS.each do |bottle_tag|
             formulae = all_formulae.to_h do |name, hash|
@@ -105,30 +126,6 @@ module Homebrew
             File.write("api/internal/formula.#{bottle_tag}.json", JSON.generate(json_contents)) unless args.dry_run?
           end
         end
-      end
-
-      private
-
-      # An advisory-database or network failure must not break the API build;
-      # the `vulnerabilities` field is omitted and the build proceeds.
-      sig { returns(T.nilable(Homebrew::Vulns::AdvisoryDatabase)) }
-      def load_advisory_database
-        Homebrew::Vulns::AdvisoryDatabase.load
-      rescue Homebrew::Vulns::CachedFeed::Error, ErrorDuringExecution => e
-        opoo "Skipping vulnerabilities field: #{e.message.lines.first&.strip}"
-        nil
-      end
-
-      sig { params(title: String).returns(String) }
-      def html_template(title)
-        <<~EOS
-          ---
-          title: '#{title}'
-          layout: formula
-          redirect_from: /formula-linux/#{title}
-          ---
-          {{ content }}
-        EOS
       end
     end
   end

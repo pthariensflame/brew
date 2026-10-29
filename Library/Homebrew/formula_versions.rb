@@ -317,13 +317,16 @@ class FormulaVersions
 
   # With `simulated_target`, historical `MacOS` queries answer only from
   # {Homebrew::SimulateSystem}'s target.
-  sig { params(formula: Formula, simulated_target: T::Boolean).void }
-  def initialize(formula, simulated_target: false)
+  sig {
+    params(formula: T.any(Formula, Pathname), simulated_target: T::Boolean, repository: T.nilable(Pathname)).void
+  }
+  def initialize(formula, simulated_target: false, repository: nil)
     @simulated_target = simulated_target
-    @name = T.let(formula.name, String)
-    @path = T.let(formula.tap_path, Pathname)
-    @repository = T.let(formula.tap!.path, Pathname)
-    @relative_path = T.let(@path.relative_path_from(repository).to_s, String)
+    @name = T.let(formula.is_a?(Formula) ? formula.name : formula.basename(".rb").to_s, String)
+    @path = T.let(formula.is_a?(Formula) ? formula.tap_path : formula, Pathname)
+    @repository = T.let(repository || (formula.tap!.path if formula.is_a?(Formula)) ||
+                       raise(ArgumentError, "A repository is required for a historical formula path"), Pathname)
+    @relative_path = T.let(@path.relative_path_from(@repository).to_s, String)
     # Also look at e.g. older homebrew-core paths before sharding.
     if (match = @relative_path.match(%r{^(HomebrewFormula|Formula)/(?:[a-z]|lib)/(.+)}))
       @old_relative_path = T.let("#{match[1]}/#{match[2]}", T.nilable(String))

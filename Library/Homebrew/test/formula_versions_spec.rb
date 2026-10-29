@@ -16,6 +16,18 @@ RSpec.describe FormulaVersions do
     end
   end
 
+  it "loads a deleted formula from its historical path and supplied source" do
+    versions = described_class.new(CoreTap.instance.path/"Formula/deleted.rb", repository: CoreTap.instance.path)
+    result = versions.formula_at_revision("abc123", source: <<~RUBY) { |old| old.pkg_version.to_s }
+      class Deleted < Formula
+        url "https://brew.sh/deleted-1.2.tar.gz"
+        revision 3
+      end
+    RUBY
+
+    expect(result).to eq "1.2_3"
+  end
+
   it "includes an earlier lifetime of a deleted and re-added formula in complete history" do
     current = formula("readded") do
       T.bind(self, T.class_of(Formula))
