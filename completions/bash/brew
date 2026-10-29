@@ -1780,8 +1780,17 @@ _brew_generate_analytics_api() {
     -*)
       __brewcomp "
       --debug
+      --formula-history
+      --github-packages
+      --github-packages-limit
       --help
+      --history
+      --homebrew-site
+      --influx
+      --legacy-homebrew
       --quiet
+      --releases
+      --repositories
       --verbose
       "
       return
