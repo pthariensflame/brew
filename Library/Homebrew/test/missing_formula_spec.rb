@@ -73,8 +73,10 @@ RSpec.describe Homebrew::MissingFormula do
   describe "::deleted_reason" do
     subject { described_class.deleted_reason(formula, silent: true) }
 
+    let(:tap) { Tap.fetch("homebrew", "foo") }
+    let(:tap_path) { tap.path }
+
     before do
-      tap_path = HOMEBREW_TAP_DIRECTORY/"homebrew/homebrew-foo"
       (tap_path/"Formula").mkpath
       (tap_path/"Formula/deleted-formula.rb").write "placeholder"
       ENV.delete "GIT_AUTHOR_DATE"
@@ -87,6 +89,7 @@ RSpec.describe Homebrew::MissingFormula do
         system "git", "rm", "Formula/deleted-formula.rb"
         system "git", "commit", "-m", "delete formula 'deleted-formula'"
       end
+      (tap_path/"Formula").mkpath
     end
 
     shared_examples "it detects deleted formulae" do
@@ -104,6 +107,52 @@ RSpec.describe Homebrew::MissingFormula do
     end
 
     include_examples "it detects deleted formulae"
+
+    context "with tap metadata" do
+      let(:tap) { Tap.fetch("thirdparty", "foo") }
+      let(:formula) { "#{tap}/old-formula" }
+      let(:target) { "deleted-formula" }
+
+      after do
+        FileUtils.rm_rf tap_path.parent
+      end
+
+      shared_examples "a metadata target" do
+        it "reports the deleted target" do
+          expect(described_class.deleted_reason(formula, silent: true))
+            .to include("#{formula} was deleted from #{tap}", "delete formula 'deleted-formula'",
+                        "^:Formula/deleted-formula.rb")
+        end
+
+        context "with shell syntax in the target" do
+          let(:target) { "x;:>marker;#" }
+
+          it "does not interpret the target as shell syntax" do
+            expect { described_class.reason(formula, silent: true) }
+              .not_to change { (tap_path/"marker").exist? }.from(false)
+          end
+        end
+      end
+
+      context "with an alias" do
+        before do
+          (tap_path/"notes").mkpath
+          (tap_path/"notes/#{target}.rb").write "placeholder"
+          tap.alias_dir.mkpath
+          File.symlink "../notes/#{target}.rb", tap.alias_dir/"old-formula"
+        end
+
+        include_examples "a metadata target"
+      end
+
+      context "with a rename" do
+        before do
+          (tap_path/"formula_renames.json").write JSON.generate("old-formula" => target)
+        end
+
+        include_examples "a metadata target"
+      end
+    end
 
     describe "on the core tap" do
       before do

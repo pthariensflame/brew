@@ -176,9 +176,8 @@ module Homebrew
           # Optimization for the core tap which has many monthly commits
           if tap.core_tap?
             # Check if the formula has been deleted in the last month.
-            diff_command = ["git", "diff", "--diff-filter=D", "--name-only",
-                            "@{'1 month ago'}", "--", relative_path]
-            deleted_formula = Utils.popen_read(*diff_command)
+            deleted_formula = Utils.popen_read(Utils::Git.git, "diff", "--diff-filter=D", "--name-only",
+                                               "@{'1 month ago'}", "--", relative_path)
 
             if deleted_formula.blank?
               ofail "No previously deleted formula found." unless silent
@@ -187,11 +186,10 @@ module Homebrew
           end
 
           # Find commit where formula was deleted in the last month.
-          log_command = "git log --since='1 month ago' --diff-filter=D " \
-                        "--name-only --max-count=1 " \
-                        "--format=%H\\\\n%h\\\\n%B -- #{relative_path}"
           hash, short_hash, *commit_message, relative_path_string =
-            Utils.popen_read(log_command).gsub("\\n", "\n").lines.map(&:chomp)
+            Utils.popen_read(Utils::Git.git, "log", "--since=1 month ago", "--diff-filter=D", "--name-only",
+                             "--max-count=1", "--format=%H%n%h%n%B", "--", relative_path)
+                 .lines.map(&:chomp)
 
           if hash.blank? || short_hash.blank? || relative_path_string.blank?
             ofail "No previously deleted formula found." unless silent
