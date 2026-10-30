@@ -195,13 +195,6 @@ module OS
         (opt_record/relative_dirname/basename).to_s
       end
 
-      sig { returns(T::Boolean) }
-      def formula_preserve_rpath?
-        ::Formula[name].preserve_rpath?
-      rescue FormulaUnavailableError
-        false
-      end
-
       sig { params(old_name: String, relocation: ::Keg::Relocation).returns(T.nilable(String)) }
       def relocated_name_for(old_name, relocation)
         old_prefix, new_prefix = relocation.replacement_pair_for(:prefix)
