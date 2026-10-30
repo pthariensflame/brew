@@ -85,8 +85,8 @@ module Cask
       tokens_and_files += Tap.reject(&:core_cask_tap?).flat_map(&:cask_files)
                              .then { |files| Homebrew::Trust.trusted_cask_files(files) }
       tokens_and_files.filter_map do |token_or_file|
-        CaskLoader.load(token_or_file)
-      rescue CaskUnreadableError, CaskInvalidError => e
+        token_or_file.is_a?(String) ? CaskLoader.load_from_name(token_or_file) : CaskLoader.load(token_or_file)
+      rescue CaskUnavailableError, CaskInvalidError => e
         # Don't let one broken cask break commands. But do complain.
         opoo e.message
 

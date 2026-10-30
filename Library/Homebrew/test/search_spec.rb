@@ -120,7 +120,7 @@ RSpec.describe Homebrew::Search do
     before do
       allow($stdout).to receive(:tty?).and_return(true)
       allow(Tap).to receive(:each_with_object).and_return(["testball"])
-      allow(Cask::CaskLoader).to receive(:load).with("testball").and_return(cask)
+      allow(Cask::CaskLoader).to receive(:load_from_name).with("testball").and_return(cask)
       allow(Cask::Tab).to receive(:for_cask).with(cask).and_return(tab)
     end
 
@@ -144,7 +144,7 @@ RSpec.describe Homebrew::Search do
     end
 
     it "skips casks from untrusted taps", :needs_macos do
-      allow(Cask::CaskLoader).to receive(:load).with("testball").and_raise(Homebrew::UntrustedTapError)
+      allow(Cask::CaskLoader).to receive(:load_from_name).with("testball").and_raise(Homebrew::UntrustedTapError)
 
       expect(described_class.search_casks(/testball/)).to be_empty
     end
@@ -164,6 +164,24 @@ RSpec.describe Homebrew::Search do
 
       expect(described_class.search_casks(/testball/))
         .to eq([described_class.pretty_installed("testball")])
+    end
+
+    it "does not evaluate cask source in cask file names" do
+      allow(Tap).to receive(:each_with_object)
+        .and_return(['cask "testball" do HOMEBREW_CACHE.join("evaluated").write("yes") end'])
+      allow(Cask::CaskLoader).to receive(:load).and_call_original
+      allow(Cask::CaskLoader).to receive(:load_from_name).and_call_original
+
+      described_class.search_casks(/testball/)
+
+      expect(HOMEBREW_CACHE/"evaluated").not_to exist
+    end
+
+    it "loads tap-qualified casks by full name", :needs_macos do
+      allow(Tap).to receive(:each_with_object).and_return(["thirdparty/foo/testball"])
+      allow(Cask::CaskLoader).to receive(:load).with("thirdparty/foo/testball").and_return(cask)
+
+      expect(described_class.search_casks(/testball/)).to eq(["testball"])
     end
 
     it "loads the cask loader itself" do

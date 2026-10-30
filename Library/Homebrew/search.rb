@@ -159,7 +159,11 @@ module Homebrew
       end
 
       results.sort.filter_map do |name|
-        cask = Cask::CaskLoader.load(name.to_s)
+        cask = if name.match?(HOMEBREW_TAP_CASK_REGEX)
+          Cask::CaskLoader.load(name.to_s)
+        else
+          Cask::CaskLoader.load_from_name(name.to_s)
+        end
         next if ignore_cask?(cask)
 
         pretty_install_status(
@@ -169,7 +173,7 @@ module Homebrew
           disabled:         cask.disabled?,
           mark_uninstalled: false,
         )
-      rescue Homebrew::UntrustedTapError
+      rescue Homebrew::UntrustedTapError, Cask::CaskUnavailableError
         nil
       end.uniq
     end
