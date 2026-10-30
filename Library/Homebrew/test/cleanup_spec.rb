@@ -547,7 +547,7 @@ RSpec.describe Homebrew::Cleanup do
                                caskroom_path:     Cask::Caskroom.path/"trailing-comma")
         download = Cask::Cache.path/"#{cask.token}--#{cask.version}.zip"
 
-        allow(Cask::CaskLoader).to receive(:load).with(cask.token, warn: false).and_return(cask)
+        allow(Cask::CaskLoader).to receive(:load_from_name).with(cask.token, warn: false).and_return(cask)
         FileUtils.touch download
 
         cleanup.cleanup_cask(cask)
@@ -564,7 +564,7 @@ RSpec.describe Homebrew::Cleanup do
                                caskroom_path:     Cask::Caskroom.path/"macos-only")
         download = Cask::Cache.path/"#{cask.token}--1.0.AppImage"
 
-        allow(Cask::CaskLoader).to receive(:load).with(cask.token, warn: false).and_return(cask)
+        allow(Cask::CaskLoader).to receive(:load_from_name).with(cask.token, warn: false).and_return(cask)
         FileUtils.touch download
 
         cleanup.cleanup_cask(cask)
@@ -658,6 +658,56 @@ RSpec.describe Homebrew::Cleanup do
   end
 
   describe "::cleanup_cache" do
+    context "with cask cache names", :cask do
+      before do
+        Cask::Cache.path.mkpath
+      end
+
+      test_each([false, true]) do |dry_run|
+        it "does not evaluate cask source in cache names with dry_run=#{dry_run}" do
+          [
+            'cask "cache-name" do HOMEBREW_CACHE.join("evaluated").write("yes") end',
+            "cask('cache-name') { HOMEBREW_CACHE.join('evaluated').write('yes') }",
+            ' cask "cache-name" do; HOMEBREW_CACHE.join("evaluated").write("yes"); end ',
+          ].each { |name| FileUtils.touch Cask::Cache.path/"#{name}--1.0.zip" }
+
+          described_class.new(dry_run:).cleanup_cache
+
+          expect(HOMEBREW_CACHE/"evaluated").not_to exist
+        end
+
+        it "does not load a relative Ruby file named by a cache entry with dry_run=#{dry_run}" do
+          source = mktmpdir/"cache-name.rb"
+          source.write 'cask "cache-name" do HOMEBREW_CACHE.join("evaluated").write("yes") end'
+          FileUtils.touch Cask::Cache.path/"#{source.basename}--1.0.zip"
+
+          source.dirname.cd { described_class.new(dry_run:).cleanup_cache }
+
+          expect(HOMEBREW_CACHE/"evaluated").not_to exist
+        end
+
+        it "preserves current downloads and only removes outdated downloads with dry_run=#{dry_run}" do
+          cask = Cask::CaskLoader.load("local-transmission")
+          current = Cask::Cache.path/"#{cask.token}--#{cask.version}.dmg"
+          outdated = Cask::Cache.path/"#{cask.token}--0.0.dmg"
+          [current, outdated].each { |path| FileUtils.touch path }
+
+          described_class.new(dry_run:).cleanup_cache
+
+          expect([current.exist?, outdated.exist?]).to eq([true, dry_run])
+        end
+      end
+
+      it "preserves downloads for unavailable casks" do
+        download = Cask::Cache.path/"removed-cask--1.0.zip"
+        FileUtils.touch download
+
+        cleanup.cleanup_cache
+
+        expect(download).to exist
+      end
+    end
+
     it "removes legacy cask downloads during full cache cleanup", :cask do
       cask = Cask::CaskLoader.load("local-transmission")
       download = Cask::Cache.path/"transmission-2.61.dmg--7.8.9.dmg"

@@ -708,6 +708,20 @@ module Cask
       self.for(normalized_ref, warn:).load(config:)
     end
 
+    # Loads a bare cask token without interpreting it as source, a path or a URI.
+    sig { params(name: String, warn: T::Boolean).returns(Cask) }
+    def self.load_from_name(name, warn: true)
+      if !name.match?(/\A#{HOMEBREW_TAP_CASK_TOKEN_REGEX}\z/o) || %w[. ..].include?(name)
+        raise CaskUnavailableError.new(name, "Invalid cask token.")
+      end
+
+      loader = FromAPILoader.try_new(name, warn:) ||
+               FromNameLoader.try_new(name, warn:) ||
+               FromInstalledPathLoader.try_new(name, warn:) ||
+               NullLoader.new(name)
+      loader.load(config: nil)
+    end
+
     sig { params(tapped_token: String, warn: T::Boolean).returns(T.nilable([String, Tap, T.nilable(Symbol)])) }
     def self.tap_cask_token_type(tapped_token, warn:)
       return unless (tap_with_token = Tap.with_cask_token(tapped_token))
