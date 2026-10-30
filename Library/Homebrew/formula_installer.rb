@@ -1441,8 +1441,14 @@ on_request: installed_on_request?, options:)
     odebug e, Utils::Backtrace.clean(e)
   end
 
+  # Whether {#fix_dynamic_linkage} has anything to do for the keg.
+  sig { params(_keg: Keg).returns(T::Boolean) }
+  def fix_dynamic_linkage?(_keg) = true
+
   sig { params(keg: Keg).void }
   def fix_dynamic_linkage(keg)
+    return unless fix_dynamic_linkage?(keg)
+
     if Sandbox.isolate_operation?
       keg.require_relocation! if JSON.parse(Sandbox.operation("fix_linkage", JSON.generate(path: keg.to_s),
                                                               write_paths: [Pathname(keg.to_s)]))

@@ -21,4 +21,18 @@ RSpec.describe FormulaInstaller do
       expect(formula_installer.fresh_install?(formula)).to be false
     end
   end
+
+  describe "#fix_dynamic_linkage?" do
+    subject(:formula_installer) { described_class.new(Testball.new) }
+
+    it "is false for kegs without absolute symlinks" do
+      keg = instance_double(Keg, absolute_symlinks?: false)
+      expect(formula_installer.fix_dynamic_linkage?(keg)).to be false
+    end
+
+    it "is true for kegs with absolute symlinks" do
+      keg = instance_double(Keg, absolute_symlinks?: true)
+      expect(formula_installer.fix_dynamic_linkage?(keg)).to be true
+    end
+  end
 end

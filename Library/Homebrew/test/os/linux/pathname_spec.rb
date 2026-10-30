@@ -48,6 +48,19 @@ RSpec.describe Pathname do
     end
   end
 
+  describe "#section_names" do
+    it "returns section names" do
+      expect(exec.section_names).to include(".dynamic")
+    end
+
+    it "is not read with the rest of the metadata" do
+      allow(exec).to receive(:patchelf_patcher).and_wrap_original do |method|
+        method.call.tap { |patcher| expect(patcher.elf).not_to receive(:sections) }
+      end
+      exec.rpath
+    end
+  end
+
   describe "#patch!" do
     let(:placeholder_prefix) { "@@HOMEBREW_PREFIX@@" }
     let(:short_prefix) { "/home/dwarf" }

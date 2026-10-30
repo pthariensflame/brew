@@ -53,6 +53,7 @@ module ELFShim
     @interpreter = T.let(nil, T.nilable(String))
     @dynamic_elf = T.let(nil, T.nilable(T::Boolean))
     @metadata = T.let(nil, T.nilable(Metadata))
+    @section_names = T.let(nil, T.nilable(T::Array[String]))
 
     super
   end
@@ -160,9 +161,14 @@ module ELFShim
     metadata.dynamic_elf?
   end
 
+  # Only bottling needs these and reading every section header costs far more
+  # than the rest of {Metadata}, so read them separately on demand.
   sig { returns(T::Array[String]) }
   def section_names
-    metadata.section_names
+    @section_names ||= begin
+      require "elftools"
+      open("rb") { |file| ELFTools::ELFFile.new(file).sections.map(&:name).compact_blank }
+    end
   end
 
   # Helper class for reading metadata from an ELF file.
@@ -184,9 +190,6 @@ module ELFShim
     sig { returns(T.nilable(String)) }
     attr_reader :rpath
 
-    sig { returns(T::Array[String]) }
-    attr_reader :section_names
-
     sig { params(path: ELFShim).void }
     def initialize(path)
       require "patchelf"
@@ -207,7 +210,6 @@ module ELFShim
 
       @interpreter = T.let(patcher.interpreter, T.nilable(String))
       @rpath = T.let(patcher.runpath || patcher.rpath, T.nilable(String))
-      @section_names = T.let(patcher.elf.sections.map(&:name).compact_blank, T::Array[String])
 
       @dt_flags_1 = T.let(dynamic_segment&.tag_by_type(:flags_1)&.value, T.nilable(Integer))
     end
