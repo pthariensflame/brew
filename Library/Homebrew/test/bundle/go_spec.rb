@@ -174,24 +174,22 @@ RSpec.describe Homebrew::Bundle::Go do
     end
 
     context "with selected executables" do
-      let(:executables) { %w[/tmp/go/bin/first /tmp/go/bin/second] }
+      let(:bin_dir) { mktmpdir }
+      let(:executables) { %w[first second].map { |name| (bin_dir/name).to_s } }
 
+      # Use real files rather than stubbing `File.unlink`, which `Tempfile` finalizers also call.
       before do
         Homebrew.failed = false
         allow(Utils).to receive(:popen_read)
-          .with(Pathname("go"), "env", "GOBIN", err: :err).and_return("/tmp/go/bin")
+          .with(Pathname("go"), "env", "GOBIN", err: :err).and_return(bin_dir.to_s)
         allow(Utils).to receive(:popen_read)
           .with(Pathname("go"), "env", "GOPATH", err: :err).and_return("/tmp/go")
-        allow(File).to receive(:directory?).with("/tmp/go/bin").and_return(true)
-        allow(Dir).to receive(:glob).with("/tmp/go/bin/*").and_return(executables)
         executables.each do |executable|
-          allow(File).to receive(:executable?).with(executable).and_return(true)
-          allow(File).to receive(:directory?).with(executable).and_return(false)
-          allow(File).to receive(:symlink?).with(executable).and_return(false)
+          FileUtils.touch executable
+          FileUtils.chmod "+x", executable
           allow(Utils).to receive(:popen_read)
             .with(Pathname("go"), "version", "-m", executable, err: File::NULL)
             .and_return("\tpath\texample.com/tools/example\n")
-          allow(File).to receive(:unlink).with(executable).and_return(1)
         end
       end
 
@@ -210,6 +208,7 @@ RSpec.describe Homebrew::Bundle::Go do
       end
 
       it "reports deletion errors and continues with the next executable" do
+        allow(File).to receive(:unlink).and_call_original
         expect(File).to receive(:unlink).with(executables.first).ordered.and_raise(Errno::EACCES)
         expect(File).to receive(:unlink).with(executables.last).ordered.and_return(1)
 
@@ -219,13 +218,17 @@ RSpec.describe Homebrew::Bundle::Go do
           change(Homebrew, :failed?).from(false).to(true)
             .and(output("Removed 1 Go executable\n").to_stdout)
             .and(output(
-              a_string_including("Failed to remove Go executable /tmp/go/bin/first"),
+              a_string_including("Failed to remove Go executable #{executables.first}"),
             ).to_stderr),
         )
       end
 
       it "does not count an already absent executable as removed" do
-        allow(File).to receive(:unlink).with(executables.first).and_raise(Errno::ENOENT)
+        allow(Utils).to receive(:popen_read)
+          .with(Pathname("go"), "version", "-m", executables.first, err: File::NULL) do
+          FileUtils.rm executables.first
+          "\tpath\texample.com/tools/example\n"
+        end
 
         expect do
           described_class.cleanup!(["example.com/tools/example"])
