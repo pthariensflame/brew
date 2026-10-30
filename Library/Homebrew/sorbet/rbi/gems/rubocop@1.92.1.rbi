@@ -2722,6 +2722,8 @@ RuboCop::Cop::Style::CollectionMethods::MSG = T.let(T.unsafe(nil), String)
 
 RuboCop::Cop::Style::CollectionQuerying::MSG = T.let(T.unsafe(nil), String)
 
+RuboCop::Cop::Style::CollectionQuerying::NO_BLOCK_REPLACEMENTS = T.let(T.unsafe(nil), Hash)
+
 RuboCop::Cop::Style::CollectionQuerying::REPLACEMENTS = T.let(T.unsafe(nil), Hash)
 
 RuboCop::Cop::Style::CollectionQuerying::RESTRICT_ON_SEND = T.let(T.unsafe(nil), Array)
@@ -2891,6 +2893,8 @@ RuboCop::Cop::Style::EmptyLiteral::STR_MSG = T.let(T.unsafe(nil), String)
 RuboCop::Cop::Style::EmptyMethod::MSG_COMPACT = T.let(T.unsafe(nil), String)
 
 RuboCop::Cop::Style::EmptyMethod::MSG_EXPANDED = T.let(T.unsafe(nil), String)
+
+RuboCop::Cop::Style::EmptyStringInsideInterpolation::INTERPOLATED_TYPES = T.let(T.unsafe(nil), Array)
 
 RuboCop::Cop::Style::EmptyStringInsideInterpolation::MSG_TERNARY = T.let(T.unsafe(nil), String)
 
@@ -3123,6 +3127,8 @@ RuboCop::Cop::Style::ItBlockParameter::MSG_AVOID_IT_PARAMETER = T.let(T.unsafe(n
 RuboCop::Cop::Style::ItBlockParameter::MSG_AVOID_IT_PARAMETER_MULTILINE = T.let(T.unsafe(nil), String)
 
 RuboCop::Cop::Style::ItBlockParameter::MSG_USE_IT_PARAMETER = T.let(T.unsafe(nil), String)
+
+RuboCop::Cop::Style::ItBlockParameter::SCOPE_TYPES = T.let(T.unsafe(nil), Array)
 
 RuboCop::Cop::Style::KeywordArgumentsMerging::MSG = T.let(T.unsafe(nil), String)
 
@@ -3607,6 +3613,8 @@ RuboCop::Cop::Style::RedundantSelfAssignment::METHODS_RETURNING_SELF = T.let(T.u
 RuboCop::Cop::Style::RedundantSelfAssignment::MSG = T.let(T.unsafe(nil), String)
 
 RuboCop::Cop::Style::RedundantSelfAssignmentBranch::MSG = T.let(T.unsafe(nil), String)
+
+RuboCop::Cop::Style::RedundantSelfAssignmentBranch::STATEMENT_BODY_TYPES = T.let(T.unsafe(nil), Array)
 
 RuboCop::Cop::Style::RedundantSort::MSG = T.let(T.unsafe(nil), String)
 
