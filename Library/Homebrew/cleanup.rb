@@ -158,6 +158,11 @@ module Homebrew
         end
       end
 
+      sig { params(name: String).returns(T::Boolean) }
+      def valid_cache_formula_name?(name)
+        %w[. ..].exclude?(name) && name.match?(/\A#{HOMEBREW_TAP_FORMULA_NAME_REGEX}\z/o)
+      end
+
       sig { params(pathname: Pathname, scrub: T::Boolean).returns(T::Boolean) }
       def stale_formula?(pathname, scrub)
         return false unless HOMEBREW_CELLAR.directory?
@@ -174,9 +179,10 @@ module Homebrew
         unless (formula_name = basename_str[/\A(.*?)(?:--.*?)*--?(?:#{Regexp.escape(version.to_s)})/, 1])
           return false
         end
+        return false unless valid_cache_formula_name?(formula_name)
 
         formula = begin
-          Formulary.from_rack(HOMEBREW_CELLAR/formula_name)
+          Formulary.from_rack(HOMEBREW_CELLAR/formula_name, from_cache: true)
         rescue Homebrew::UntrustedTapError
           opoo "Skipping #{formula_name}: tap formula is not trusted"
           nil
@@ -186,8 +192,10 @@ module Homebrew
 
         formula_excluded_versions_from_cleanup = nil
         if formula.blank? && formula_name.delete_suffix!("_bottle_manifest")
+          return false unless valid_cache_formula_name?(formula_name)
+
           formula = begin
-            Formulary.from_rack(HOMEBREW_CELLAR/formula_name)
+            Formulary.from_rack(HOMEBREW_CELLAR/formula_name, from_cache: true)
           rescue Homebrew::UntrustedTapError
             opoo "Skipping #{formula_name}: tap formula is not trusted"
             nil
