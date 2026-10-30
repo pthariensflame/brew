@@ -230,6 +230,18 @@ module GitHub
     API.open_rest(url, request_method: :GET)
   end
 
+  sig {
+    params(user: String, repo: String, tag: String).returns(T.nilable(T::Hash[String, T.untyped]))
+  }
+  def self.get_draft_release(user, repo, tag)
+    url = "#{API_URL}/repos/#{user}/#{repo}/releases"
+    API.paginate_rest(url) do |releases|
+      draft_release = releases.find { |release| release["draft"] && release["tag_name"] == tag }
+      return draft_release if draft_release
+    end
+    nil
+  end
+
   sig { params(user: String, repo: String).returns(T::Hash[String, T.untyped]) }
   def self.get_latest_release(user, repo)
     url = "#{API_URL}/repos/#{user}/#{repo}/releases/latest"
