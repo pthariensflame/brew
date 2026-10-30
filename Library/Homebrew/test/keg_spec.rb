@@ -39,6 +39,44 @@ RSpec.describe Keg do
     expect(described_class.all).to eq([keg])
   end
 
+  describe "#formula_preserve_rpath?" do
+    let(:fallback_formula) do
+      formula("foo") do
+        T.bind(self, T.class_of(Formula))
+        url "foo-1.0"
+      end
+    end
+
+    before { stub_formula_loader(fallback_formula, "foo", call_original: true) }
+
+    test_each([true, false]) do |preserve_rpath|
+      it "uses preserve_rpath=#{preserve_rpath} from the installed formula" do
+        allow(fallback_formula).to receive(:preserve_rpath?).and_return(!preserve_rpath)
+        (keg/".brew").mkpath
+        (keg/".brew/foo.rb").write <<~RUBY
+          class Foo < Formula
+            url "foo-1.0"
+            preserve_rpath value: #{preserve_rpath}
+          end
+        RUBY
+
+        expect(keg.formula_preserve_rpath?).to be(preserve_rpath)
+      end
+    end
+
+    it "falls back to the current formula when the installed formula is missing" do
+      allow(fallback_formula).to receive(:preserve_rpath?).and_return(true)
+
+      expect(keg.formula_preserve_rpath?).to be(true)
+    end
+
+    it "returns false when neither formula is available" do
+      allow(Formulary).to receive(:factory).with("foo").and_raise(FormulaUnavailableError.new("foo"))
+
+      expect(keg.formula_preserve_rpath?).to be(false)
+    end
+  end
+
   it "checks existing Python site-packages directories without running Python" do
     site_packages = HOMEBREW_PREFIX/"lib/python3.14/site-packages"
     site_packages.mkpath
