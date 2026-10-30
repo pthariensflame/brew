@@ -228,9 +228,14 @@ Bump `compatibility_version` by `1` when a formula update requires any recursive
 
 Do not change `compatibility_version` for updates that do not require dependent `revision` bumps. It should never decrease and should only increment by `1` at a time.
 
+Formulae with dependents should define `compatibility_version 1` so Homebrew can tell that their later updates are compatible.
+Add it in the pull request that gives a formula its first dependent.
+Adding a first `compatibility_version 1` without changing the version needs no dependent `revision` bumps because existing installations recorded no `compatibility_version` and so never match it.
+`brew audit` checks this.
+
 Use [`brew bump-compatibility-version`](Manpage.md#bump-compatibility-version-options-formula-) to increment `compatibility_version` mechanically.
 
-[`brew audit`](Manpage.md) checks this relationship in both directions. If a formula's `compatibility_version` increases, at least one recursive dependent in the same pull request must also increase `revision` by `1`. If a formula's `revision` increases because a changed recursive dependency also changed versions, that dependency must increase `compatibility_version` by `1`.
+[`brew audit`](Manpage.md) checks this relationship in both directions. If a formula's `compatibility_version` increases, other than to a first `compatibility_version 1` without a version change, at least one recursive dependent in the same pull request must also increase `revision` by `1`. If a formula's `revision` increases because a changed recursive dependency also changed versions, that dependency must increase `compatibility_version` by `1`.
 
 These checks are based on dependent `revision` bumps in the pull request, not on general ABI analysis. Homebrew cannot automatically detect every compatibility break that is not covered by linkage or formula tests, so maintainers may still need to bump `compatibility_version` and dependent `revision`s manually when they know a rebuild is required.
 

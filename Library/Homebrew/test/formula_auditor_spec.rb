@@ -2049,6 +2049,31 @@ RSpec.describe Homebrew::FormulaAuditor do
       expect(auditor.problems).to be_empty
     end
 
+    it "allows a first compatibility_version 1 without dependent revision bumps" do
+      stub_committed_info(auditor, default: [{ compatibility_version: nil }, { compatibility_version: nil }])
+      stub_changed_paths(auditor, all_paths: [])
+      allow(target_formula).to receive(:compatibility_version).and_return(1)
+
+      auditor.audit_compatibility_version
+
+      expect(auditor.problems).to be_empty
+    end
+
+    it "requires dependent revision bumps for a first compatibility_version 1 with a version change" do
+      stub_committed_info(
+        auditor,
+        default: [{ version: Version.new("0.9"), compatibility_version: nil }] * 2,
+      )
+      stub_changed_paths(auditor, all_paths: [])
+      allow(target_formula).to receive(:compatibility_version).and_return(1)
+
+      auditor.audit_compatibility_version
+
+      expect(auditor.problems).to include(
+        a_hash_including(message: a_string_matching(/no recursive dependent formulae increased/)),
+      )
+    end
+
     context "with existing committed compatibility_version" do
       before do
         stub_changed_paths(auditor, all_paths: [])
@@ -2155,6 +2180,65 @@ RSpec.describe Homebrew::FormulaAuditor do
 
         expect(auditor.problems).to be_empty
       end
+    end
+  end
+
+  describe "#audit_dependencies_compatibility_version" do
+    let(:dependency) do
+      formula "bar" do
+        T.bind(self, T.class_of(Formula))
+        url "https://brew.sh/bar-1.0.tgz"
+      end
+    end
+    let(:fa) do
+      formula_auditor "foo", <<~RUBY, git: true
+        class Foo < Formula
+          url "https://brew.sh/foo-1.0.tgz"
+          depends_on "bar"
+        end
+      RUBY
+    end
+
+    before do
+      stub_formula_loader(dependency, dependency.name, call_original: true)
+      allow(fa.formula).to receive(:core_formula?).and_return(true)
+      allow(dependency).to receive(:core_formula?).and_return(true)
+    end
+
+    it "asks a newly added dependency without one to define compatibility_version 1" do
+      stub_committed_info(fa, default: [{}, {}])
+
+      fa.audit_dependencies_compatibility_version
+
+      expect(fa.problems).to include(
+        a_hash_including(message: a_string_matching(/`bar` should define `compatibility_version 1`/)),
+      )
+    end
+
+    it "ignores an implicit dependency" do
+      stub_committed_info(fa, default: [{}, {}])
+      allow(fa.formula).to receive(:deps).and_return([Dependency.new(dependency.name, [:build, :implicit])])
+
+      fa.audit_dependencies_compatibility_version
+
+      expect(fa.problems).to be_empty
+    end
+
+    it "ignores a dependency that was already there" do
+      stub_committed_info(fa, default: [{}, { dependency_names: ["bar"] }])
+
+      fa.audit_dependencies_compatibility_version
+
+      expect(fa.problems).to be_empty
+    end
+
+    it "ignores a newly added dependency that defines compatibility_version" do
+      stub_committed_info(fa, default: [{}, {}])
+      allow(dependency).to receive(:compatibility_version).and_return(1)
+
+      fa.audit_dependencies_compatibility_version
+
+      expect(fa.problems).to be_empty
     end
   end
 
