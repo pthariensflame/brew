@@ -106,6 +106,15 @@ RSpec.describe Cask::Cask, :cask do
     ensure
       FileUtils.rm_rf HOMEBREW_TAP_DIRECTORY/"thirdparty"
     end
+
+    it "does not load cask source from core cask tokens" do
+      allow(CoreCaskTap.instance).to receive(:cask_tokens)
+        .and_return(['cask "core-source" do HOMEBREW_CACHE.join("evaluated").write("yes") end'])
+      allow(Tap).to receive(:reject).and_return([])
+
+      expect { expect(described_class.all).to eq([]) }
+        .to output(/Invalid cask token/).to_stderr
+    end
   end
 
   describe "#any_version_installed?" do
