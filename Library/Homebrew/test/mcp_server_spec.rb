@@ -13,6 +13,8 @@ RSpec.describe Homebrew::McpServer do
   let(:jsonrpc) { Homebrew::McpServer::JSON_RPC_VERSION }
   let(:id) { Random.rand(1000) }
   let(:code) { Homebrew::McpServer::ERROR_CODE }
+  let(:command_status) { instance_double(Process::Status, success?: true) }
+  let(:command_waiter) { instance_double(Thread, value: command_status) }
 
   describe "#initialize" do
     it "sets debug_logging to false by default" do
@@ -131,7 +133,8 @@ RSpec.describe Homebrew::McpServer do
 
     test_each(Homebrew::McpServer::TOOLS) do |(tool_name, tool_definition)|
       it "responds to tools/call for #{tool_name}" do
-        allow(Open3).to receive(:popen2e).and_return("output for #{tool_name}")
+        allow(Open3).to receive(:popen2e)
+          .and_yield(StringIO.new, StringIO.new("output for #{tool_name}"), command_waiter)
         arguments = {}
         Array(tool_definition[:required]).each do |required_key|
           arguments[required_key] = "dummy"
@@ -148,15 +151,29 @@ RSpec.describe Homebrew::McpServer do
         expect(result).to eq({
           jsonrpc: jsonrpc,
           id:      id,
-          result:  { content: [{ type: "text", text: "output for #{tool_name}" }] },
+          result:  { content: [{ type: "text", text: "output for #{tool_name}" }], isError: false },
         })
       end
+    end
+
+    it "treats null tool arguments as an empty object" do
+      allow(Open3).to receive(:popen2e)
+        .and_yield(StringIO.new, StringIO.new("commands output"), command_waiter)
+      request = {
+        "id"     => id,
+        "method" => "tools/call",
+        "params" => { "name" => "commands", "arguments" => nil },
+      }
+
+      expect(server.handle_request(request)).to include(
+        result: a_hash_including(content: [{ type: "text", text: "commands output" }]),
+      )
     end
 
     it "passes tool arguments as argv when spawning brew" do
       expect(Open3).to receive(:popen2e)
         .with(Homebrew::McpServer::HOMEBREW_BREW_FILE, "search", "visual studio;beta")
-        .and_return("output")
+        .and_yield(StringIO.new, StringIO.new("output"), command_waiter)
       request = {
         "id"     => id,
         "method" => "tools/call",
@@ -167,6 +184,23 @@ RSpec.describe Homebrew::McpServer do
       }
 
       server.handle_request(request)
+    end
+
+    it "reports a failed command as a tool error and preserves its output" do
+      allow(command_status).to receive(:success?).and_return(false)
+      allow(Open3).to receive(:popen2e)
+        .and_yield(StringIO.new, StringIO.new("command failed"), command_waiter)
+      request = {
+        "id"     => id,
+        "method" => "tools/call",
+        "params" => { "name" => "help", "arguments" => { "command" => "unknown-command" } },
+      }
+
+      expect(server.handle_request(request)).to eq({
+        jsonrpc:,
+        id:,
+        result:  { content: [{ type: "text", text: "command failed" }], isError: true },
+      })
     end
 
     it "rejects an inline cask definition argument without spawning brew" do
@@ -229,6 +263,24 @@ RSpec.describe Homebrew::McpServer do
 
   describe "#run" do
     let(:sleep_time) { 0.001 }
+
+    it "handles a tool call without arguments before a ping" do
+      allow(Open3).to receive(:popen2e)
+        .and_yield(StringIO.new, StringIO.new("commands output"), command_waiter)
+      stdin.puts({ jsonrpc:, id:, method: "tools/call", params: { name: "commands" } }.to_json)
+      stdin.puts({ jsonrpc:, id: id + 1, method: "ping" }.to_json)
+      stdin.rewind
+
+      server.run
+
+      expect(stdout.string.lines.map { |line| JSON.parse(line) }).to match([
+        a_hash_including(
+          "id"     => id,
+          "result" => a_hash_including("content" => [{ "type" => "text", "text" => "commands output" }]),
+        ),
+        { "jsonrpc" => jsonrpc, "id" => id + 1, "result" => {} },
+      ])
+    end
 
     it "runs the loop and exits cleanly on interrupt" do
       stub_const("ARGV", ["--debug"])
