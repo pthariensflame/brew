@@ -311,7 +311,7 @@ module Homebrew
         return respond_error(id, "Invalid formula or cask argument")
       end
 
-      command_args = tool_command_arguments(tool_name, request["params"]["arguments"])
+      command_args = tool_command_arguments(tool_name, request["params"]["arguments"] || {})
       progress_token = request["params"]["_meta"]&.fetch("progressToken", nil)
       brew_command = T.cast(tool.fetch(:command), String)
                       .delete_prefix("brew ")
@@ -321,7 +321,7 @@ module Homebrew
       new_output = T.let(false, T::Boolean)
       output = +""
 
-      text = Open3.popen2e(HOMEBREW_BREW_FILE, brew_command, *command_args) do |stdin, io, _wait|
+      Open3.popen2e(HOMEBREW_BREW_FILE, brew_command, *command_args) do |stdin, io, wait|
         stdin.close
 
         reader = Thread.new do
@@ -356,10 +356,8 @@ module Homebrew
 
         reader.join
 
-        output
+        respond_result(id, { content: [{ type: "text", text: output }], isError: !wait.value.success? })
       end
-
-      respond_result(id, { content: [{ type: "text", text: }] })
     end
 
     sig { params(tool_name: Symbol, arguments: T::Hash[String, T.untyped]).returns(T::Array[String]) }
