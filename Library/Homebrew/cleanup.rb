@@ -894,6 +894,8 @@ module Homebrew
 
     sig { params(rack: T.nilable(Pathname)).void }
     def cleanup_cache_db(rack = nil)
+      return if dry_run?
+
       FileUtils.rm_rf [
         cache/"desc_cache.json",
         cache/"linkage.db",
@@ -918,6 +920,8 @@ module Homebrew
 
     sig { params(dirs: T.nilable(T::Array[Pathname])).void }
     def rm_ds_store(dirs = nil)
+      return if dry_run?
+
       dirs ||= Keg.must_exist_directories + [
         HOMEBREW_PREFIX/"Caskroom",
       ]
