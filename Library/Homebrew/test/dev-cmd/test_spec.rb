@@ -44,6 +44,32 @@ RSpec.describe Homebrew::DevCmd::Test do
     end
   end
 
+  it "asks to upgrade outdated test dependencies" do
+    cmd = described_class.new(["foo"])
+    foo = formula("foo") do
+      T.bind(self, T.class_of(Formula))
+      url "https://brew.sh/foo-1.0.tar.gz"
+
+      test do
+        true
+      end
+    end
+    bar = formula("bar") do
+      T.bind(self, T.class_of(Formula))
+      url "https://brew.sh/bar-1.0.tar.gz"
+    end
+    dependency = Dependency.new(bar.name)
+    allow(bar).to receive(:any_version_installed?).and_return(true)
+    stub_formula_loader(bar)
+    allow(dependency).to receive(:installed?).and_return(false)
+    allow(cmd.args.named).to receive(:to_resolved_formulae).and_return([foo])
+    allow(foo).to receive_messages(latest_version_installed?: true, linked?: true, deps: [dependency])
+    allow(Utils::GemSetup).to receive(:install_bundler_gems!)
+
+    expect { cmd.run }.to output(/foo has outdated test dependencies: bar\nUpgrade them with `brew upgrade bar`/)
+      .to_stderr
+  end
+
   it "tests a given Formula without process-listing warnings", :integration_test do
     skip "Nested sandboxing is not supported." if Sandbox.nested_sandbox?
 
