@@ -543,7 +543,7 @@ jobs:
 
       - run: brew test-bot --only-setup
         env:
-          HOMEBREW_TEST_BOT_IGNORE_DOCTOR_FAILURE: ${{ matrix.padded-prefix && '1' || null }}
+          HOMEBREW_TEST_BOT_IGNORE_DOCTOR_FAILURE: ${{ case(!!matrix.padded-prefix, '1', null) }}
 
       - name: Run brew test-bot formulae
         run: |
@@ -553,7 +553,7 @@ jobs:
           fi
           brew test-bot "${test_bot_args[@]}" --test-default-formula
         env:
-          JSON_TAB: ${{ matrix.system-tar != true && '1' || '' }}
+          JSON_TAB: ${{ case(!!matrix.system-tar, '', '1') }}
 
   bundle-and-services:
     name: ${{ matrix.name }}
