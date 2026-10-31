@@ -5,7 +5,7 @@ last_review_date: "2026-07-26"
 # Responsible AI Usage
 
 This guide is for maintainers and contributors who use "Artificial Intelligence"/Large Language Model (AI/LLM) tools when working on Homebrew.
-It expands on the [AI/LLM usage rules in our Contributing guide](https://github.com/Homebrew/brew/blob/HEAD/CONTRIBUTING.md) and the repository's `AGENTS.md` files with the principles we expect you to apply.
+It expands on the [AI/LLM usage rules in our Contributing guide](https://github.com/Homebrew/brew/blob/HEAD/CONTRIBUTING.md#artificial-intelligencelarge-language-model-aillm-usage) and the repository's `AGENTS.md` files with the principles we expect you to apply.
 
 AI tools can make you faster.
 They can also produce confidently plausible but wrong output.
@@ -22,7 +22,7 @@ Verify AI output for correctness as you would that of an avatarless GitHub user 
 Read it, run it, test it and make sure you understand it.
 
 Do not ask other humans to review your AI-generated code until you have reviewed it yourself.
-This is already a requirement in our [Contributing guide](https://github.com/Homebrew/brew/blob/HEAD/CONTRIBUTING.md): you must review all AI/LLM-generated content before asking anyone in Homebrew to review it.
+This is already a requirement in our [Contributing guide](https://github.com/Homebrew/brew/blob/HEAD/CONTRIBUTING.md#artificial-intelligencelarge-language-model-aillm-usage): you must review all AI/LLM-generated content before asking anyone in Homebrew to review it.
 
 Answer maintainer questions and pull request review comments yourself without using AI/LLM.
 Reviewers need to engage directly with the person responsible for the contribution.
