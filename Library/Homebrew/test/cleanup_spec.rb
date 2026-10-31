@@ -385,6 +385,39 @@ RSpec.describe Homebrew::Cleanup do
     end
   end
 
+  describe "#cleanup_formula" do
+    it "preserves .DS_Store files during a dry run" do
+      formula = Testball.new
+      metadata = formula.rack/".DS_Store"
+      metadata.dirname.mkpath
+      metadata.write "metadata"
+
+      described_class.new(dry_run: true).cleanup_formula(formula, quiet: true)
+
+      expect(metadata).to exist
+    end
+
+    it "preserves cache database files during a dry run" do
+      cache_files = %w[desc_cache.json linkage.db linkage.db.db].map { |name| HOMEBREW_CACHE/name }
+      cache_files.each { |path| path.write "cache" }
+
+      described_class.new(dry_run: true).cleanup_formula(Testball.new, quiet: true)
+
+      expect(cache_files).to all(exist)
+    end
+
+    it "preserves linkage cache entries during a dry run" do
+      formula = Testball.new
+      cache_file = HOMEBREW_CACHE/"linkage.json"
+      cached_linkage = { (formula.rack/"0.1").to_s => { "keg_files_dylibs" => {} } }
+      cache_file.write cached_linkage.to_json
+
+      described_class.new(dry_run: true).cleanup_formula(formula, quiet: true)
+
+      expect(JSON.parse(cache_file.read)).to eq(cached_linkage)
+    end
+  end
+
   specify "::cleanup_formula" do
     f1 = Class.new(Testball) do
       version "1.0"
@@ -485,6 +518,21 @@ RSpec.describe Homebrew::Cleanup do
     ensure
       read_only&.chmod 0755
     end
+  end
+
+  it "preserves cask .DS_Store files during a dry run" do
+    cask = Cask::Cask.new("cleanup-dry-run") do
+      version "1.0"
+      sha256 :no_check
+      url "https://example.com/cleanup-dry-run-1.0.zip"
+    end
+    metadata = cask.caskroom_path/".DS_Store"
+    metadata.dirname.mkpath
+    metadata.write "metadata"
+
+    described_class.new(dry_run: true).cleanup_cask(cask)
+
+    expect(metadata).to exist
   end
 
   describe "#cleanup_cask", :cask do
