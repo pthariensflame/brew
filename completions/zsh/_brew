@@ -290,6 +290,7 @@ __brew_internal_commands() {
       'generate-cask-api:Generate `homebrew/cask` API data files for https://formulae.brew.sh'
       'generate-cask-ci-matrix:Generate a GitHub Actions matrix for a given pull request URL or list of cask names'
       'generate-formula-api:Generate `homebrew/core` API data files for https://formulae.brew.sh'
+      'generate-formula-feeds:Generate recent formula additions and updates for https://formulae.brew.sh feeds'
       'generate-internal-api:Generate internal API data files for https://formulae.brew.sh'
       'generate-vulns-advisories:Generate OSV-schema advisory records for the `Homebrew` ecosystem from `homebrew/core` formula patch `resolves` annotations, for https://github.com/Homebrew/advisory-database'
       'pr-automerge:Find pull requests that can be automatically merged using `brew pr-publish`'
@@ -1632,6 +1633,20 @@ _brew_generate_formula_api() {
     '--dry-run[Generate API data without writing it to files]' \
     '--help[Show this message]' \
     '--quiet[Make some output more quiet]' \
+    '--verbose[Make some output more verbose]'
+}
+
+# brew generate-formula-feeds
+_brew_generate_formula_feeds() {
+  _arguments \
+    '--debug[Display any debugging information]' \
+    '--help[Show this message]' \
+    '--new-limit[Maximum number of new formula entries (default: 50). Use 0 for none]' \
+    '--output[Write JSON to this path instead of `_data/formula_feeds.json`]' \
+    '--quiet[Make some output more quiet]' \
+    '--repository[Read formula history from this Git repository instead of `homebrew/core`]' \
+    '--revision[Read history ending at this revision instead of `HEAD`]' \
+    '--updated-limit[Maximum number of updated formula entries (default: 500). Use 0 for none]' \
     '--verbose[Make some output more verbose]'
 }
 
