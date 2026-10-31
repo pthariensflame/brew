@@ -70,7 +70,8 @@ module Homebrew
               dependency.to_formula.any_version_installed?
             end
             if missing_test_deps.present?
-              ofail "#{f.full_name} is missing test dependencies: #{missing_test_deps.join(" ")}"
+              ofail "#{f.full_name} is missing test dependencies: #{missing_test_deps.join(" ")}\n" \
+                    "Install with `brew install #{missing_test_deps.join(" ")}`."
             end
             if outdated_test_deps.present?
               ofail "#{f.full_name} has outdated test dependencies: #{outdated_test_deps.join(" ")}\n" \
