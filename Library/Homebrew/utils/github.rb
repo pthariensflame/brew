@@ -432,14 +432,40 @@ module GitHub
     result["organization"]["team"]["members"]["nodes"].to_h { |member| [member["login"], member["name"]] }
   end
 
+  # Return the published monthly sponsorship tiers for an organisation.
+  sig { params(user: String).returns(T::Array[{ description: String, monthly_amount: Integer }]) }
+  def self.sponsorship_tiers(user)
+    query = <<~EOS
+      query($user: String!) {
+        organization(login: $user) {
+          sponsorsListing {
+            tiers(first: 100, includeUnpublished: false) {
+              nodes {
+                description
+                monthlyPriceInDollars
+                isOneTime
+              }
+            }
+          }
+        }
+      }
+    EOS
+    result = API.open_graphql(query, variables: { user: }, scopes: ["user"])
+    Array(result.dig("organization", "sponsorsListing", "tiers", "nodes")).filter_map do |tier|
+      next if tier.nil? || tier["isOneTime"]
+
+      { description: tier.fetch("description"), monthly_amount: tier.fetch("monthlyPriceInDollars") }
+    end
+  end
+
   sig {
     params(user: String)
       .returns(
         T::Array[{
-          closest_tier_monthly_amount: Integer,
-          login:                       String,
-          monthly_amount:              Integer,
-          name:                        String,
+          login:          String,
+          monthly_amount: Integer,
+          name:           String,
+          type:           String,
         }],
       )
   }
@@ -452,13 +478,12 @@ module GitHub
               endCursor
             }
             nodes {
+              isOneTimePayment
               tier {
                 monthlyPriceInDollars
-                closestLesserValueTier {
-                  monthlyPriceInDollars
-                }
               }
               sponsorEntity {
+                __typename
                 ... on Organization { login name }
                 ... on User { login name }
               }
@@ -492,18 +517,17 @@ module GitHub
     # Only raise errors if we didn't get any sponsorships.
     raise API::Error, errors.map { |e| e["message"] }.join("\n") if sponsorships.blank? && errors.present?
 
-    sponsorships.map do |sponsorship|
+    sponsorships.filter_map do |sponsorship|
+      next if sponsorship["isOneTimePayment"]
+
       sponsor = sponsorship["sponsorEntity"]
       tier = sponsorship["tier"].presence || {}
-      monthly_amount = tier["monthlyPriceInDollars"].presence || 0
-      closest_tier = tier["closestLesserValueTier"].presence || {}
-      closest_tier_monthly_amount = closest_tier["monthlyPriceInDollars"].presence || 0
 
       {
-        name:                        sponsor["name"].presence || sponsor["login"],
-        login:                       sponsor["login"],
-        monthly_amount:,
-        closest_tier_monthly_amount:,
+        name:           sponsor["name"].presence || sponsor["login"],
+        login:          sponsor["login"],
+        type:           sponsor["__typename"],
+        monthly_amount: tier.fetch("monthlyPriceInDollars", 0),
       }
     end
   end

@@ -4,6 +4,58 @@
 require "utils/github"
 
 RSpec.describe GitHub do
+  describe "::sponsorship_tiers" do
+    it "returns published monthly tiers" do
+      allow(GitHub::API).to receive(:open_graphql).with(
+        a_string_including("tiers(first: 100, includeUnpublished: false)", "description",
+                           "monthlyPriceInDollars", "isOneTime"),
+        variables: { user: "Homebrew" }, scopes: ["user"],
+      ).and_return("organization" => {
+        "sponsorsListing" => {
+          "tiers" => {
+            "nodes" => [
+              { "description" => "Logo in our README", "monthlyPriceInDollars" => 1500, "isOneTime" => false },
+              { "description" => "One-time gift", "monthlyPriceInDollars" => 1, "isOneTime" => true },
+              nil,
+            ],
+          },
+        },
+      })
+
+      expect(described_class.sponsorship_tiers("Homebrew"))
+        .to eq([{ description: "Logo in our README", monthly_amount: 1500 }])
+    end
+  end
+
+  describe "::sponsorships" do
+    test_each([nil, 0, 1750].product(%w[User Organization], [false, true])) do |monthly_amount, type, one_time|
+      it "handles $#{monthly_amount.inspect} #{type} sponsorships with one-time payments #{one_time}" do
+        allow(GitHub::API).to receive(:paginate_graphql).with(
+          a_string_including("monthlyPriceInDollars", "__typename", "isOneTimePayment"),
+          variables: { user: "Homebrew" }, scopes: ["user"], raise_errors: false,
+        ).and_yield("data" => {
+          "organization" => {
+            "sponsorshipsAsMaintainer" => {
+              "nodes"    => [{
+                "isOneTimePayment" => one_time,
+                "sponsorEntity"    => { "__typename" => type, "login" => "sponsor", "name" => nil },
+                "tier"             => monthly_amount && { "monthlyPriceInDollars" => monthly_amount },
+              }],
+              "pageInfo" => { "hasNextPage" => false },
+            },
+          },
+        })
+
+        expect(described_class.sponsorships("Homebrew")).to eq(one_time ? [] : [{
+          type:,
+          login:          "sponsor",
+          name:           "sponsor",
+          monthly_amount: monthly_amount || 0,
+        }])
+      end
+    end
+  end
+
   describe "::members_by_team" do
     it "reports an inaccessible team without assuming the token scope is missing" do
       allow(GitHub::API).to receive(:open_graphql).and_return({

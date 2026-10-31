@@ -12,9 +12,6 @@ module Homebrew
     class UpdateSponsors < AbstractCommand
       include SystemCommand::Mixin
 
-      NAMED_MONTHLY_AMOUNT = 100
-      URL_MONTHLY_AMOUNT = 1000
-
       cmd_args do
         description <<~EOS
           Update the list of GitHub Sponsors in the `Homebrew/brew` README.
@@ -27,22 +24,33 @@ module Homebrew
 
       sig { override.void }
       def run
-        named_sponsors = []
-        logo_sponsors = []
-        largest_monthly_amount = T.let(0, Integer)
+        tiers = GitHub.sponsorship_tiers("Homebrew")
+        odie "No sponsorship tiers found!" if tiers.empty?
 
-        GitHub.sponsorships("Homebrew").each do |s|
-          largest_monthly_amount = [s[:monthly_amount], s[:closest_tier_monthly_amount]].max
-          if largest_monthly_amount >= NAMED_MONTHLY_AMOUNT
-            named_sponsors << "[#{sponsor_name(s)}](#{sponsor_url(s)})"
-          end
-
-          next if largest_monthly_amount < URL_MONTHLY_AMOUNT
-
-          logo_sponsors << "[![#{sponsor_name(s)}](#{sponsor_logo(s)})](#{sponsor_url(s)})"
+        sponsorships = GitHub.sponsorships("Homebrew")
+        unless sponsorships.any? { |s| s[:monthly_amount].positive? }
+          odie "No sponsorship amounts found! Ensure you have sufficient permissions!"
         end
 
-        odie "No sponsorships amounts found! Ensure you have sufficient permissions!" if largest_monthly_amount.zero?
+        named_sponsors = []
+        logo_sponsors = []
+
+        sponsorships.each do |s|
+          applicable_tiers = tiers.select do |tier|
+            next false if s[:monthly_amount] < tier[:monthly_amount]
+
+            description = tier[:description]
+            description.match?(/\bREADME\b/i) &&
+              (s[:type] != "Organization" || !description.match?(/\bindividuals only\b/i))
+          end
+          next if applicable_tiers.empty?
+
+          named_sponsors << s[:name]
+
+          next unless applicable_tiers.any? { |tier| tier[:description].match?(/\blogo\b/i) }
+
+          logo_sponsors << "[![#{s[:name]}](https://github.com/#{s[:login]}.png?size=64)](https://github.com/#{s[:login]})"
+        end
 
         named_sponsors << "many other users and organisations via [GitHub Sponsors](https://github.com/sponsors/Homebrew)"
 
@@ -62,23 +70,6 @@ module Homebrew
         else
           puts "List of sponsors updated in the README."
         end
-      end
-
-      private
-
-      sig { params(sponsor: T::Hash[Symbol, String]).returns(T.nilable(String)) }
-      def sponsor_name(sponsor)
-        sponsor[:name] || sponsor[:login]
-      end
-
-      sig { params(sponsor: T::Hash[Symbol, String]).returns(String) }
-      def sponsor_logo(sponsor)
-        "https://github.com/#{sponsor[:login]}.png?size=64"
-      end
-
-      sig { params(sponsor: T::Hash[Symbol, String]).returns(String) }
-      def sponsor_url(sponsor)
-        "https://github.com/#{sponsor[:login]}"
       end
     end
   end
