@@ -1251,6 +1251,18 @@ __fish_brew_complete_arg 'generate-formula-api' -l quiet -d 'Make some output mo
 __fish_brew_complete_arg 'generate-formula-api' -l verbose -d 'Make some output more verbose'
 
 
+complete -f -c brew -n 'not __fish_brew_command; and set -q HOMEBREW_DEVELOPER' -a 'generate-formula-feeds' -d 'Generate recent formula additions and updates for https://formulae.brew.sh feeds'
+__fish_brew_complete_arg 'generate-formula-feeds' -l debug -d 'Display any debugging information'
+__fish_brew_complete_arg 'generate-formula-feeds' -l help -d 'Show this message'
+__fish_brew_complete_arg 'generate-formula-feeds' -l new-limit -d 'Maximum number of new formula entries (default: 50). Use 0 for none'
+__fish_brew_complete_arg 'generate-formula-feeds' -l output -d 'Write JSON to this path instead of `_data/formula_feeds.json`'
+__fish_brew_complete_arg 'generate-formula-feeds' -l quiet -d 'Make some output more quiet'
+__fish_brew_complete_arg 'generate-formula-feeds' -l repository -d 'Read formula history from this Git repository instead of `homebrew/core`'
+__fish_brew_complete_arg 'generate-formula-feeds' -l revision -d 'Read history ending at this revision instead of `HEAD`'
+__fish_brew_complete_arg 'generate-formula-feeds' -l updated-limit -d 'Maximum number of updated formula entries (default: 500). Use 0 for none'
+__fish_brew_complete_arg 'generate-formula-feeds' -l verbose -d 'Make some output more verbose'
+
+
 complete -f -c brew -n 'not __fish_brew_command; and set -q HOMEBREW_DEVELOPER' -a 'generate-internal-api' -d 'Generate internal API data files for https://formulae.brew.sh'
 __fish_brew_complete_arg 'generate-internal-api' -l debug -d 'Display any debugging information'
 __fish_brew_complete_arg 'generate-internal-api' -l dry-run -d 'Generate internal API data without writing it to files'
